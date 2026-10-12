@@ -1,0 +1,248 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:AnimeTracker.ViewModels"
+        xmlns:models="using:AnimeTracker.Models"
+        xmlns:jikan="using:AnimeTracker.Services.Jikan"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="600"
+        x:Class="AnimeTracker.Views.AddTitleWindow"
+        x:DataType="vm:AddTitleViewModel"
+        Title="Add Title - AnimeTracker"
+        Width="760" Height="600"
+        MinWidth="650" MinHeight="500"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource AppBackgroundBrush}"
+        Foreground="{StaticResource AppTextPrimaryBrush}">
+
+    <Window.Styles>
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource AppTextPrimaryBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource AppTextPrimaryBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="TabItem">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource AppTextSecondaryBrush}" />
+            <Setter Property="Padding" Value="16,10" />
+        </Style>
+        <Style Selector="TabItem:selected">
+            <Setter Property="Foreground" Value="{StaticResource AppAccentHoverBrush}" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="24">
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,16" Spacing="4">
+            <TextBlock Text="Add New Title" FontSize="20" FontWeight="Bold" />
+            <TextBlock Text="Search the Jikan (MyAnimeList) catalog or add a custom entry manually"
+                       FontSize="13" Foreground="{StaticResource AppTextSecondaryBrush}" />
+        </StackPanel>
+
+        <!-- Main Tabs -->
+        <TabControl Grid.Row="1" Background="Transparent">
+            <!-- TAB 1: JIKAN SEARCH -->
+            <TabItem Header="Search Catalog">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0,16,0,0">
+                    <!-- Media Type Filter & Query Input -->
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="0,0,0,12">
+                        <ComboBox Grid.Column="0"
+                                  Width="130"
+                                  Margin="0,0,10,0"
+                                  SelectedItem="{Binding SearchMediaType}">
+                            <models:MediaType>Anime</models:MediaType>
+                            <models:MediaType>Manga</models:MediaType>
+                            <models:MediaType>Manhwa</models:MediaType>
+                        </ComboBox>
+
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding SearchQuery, Mode=TwoWay}"
+                                 PlaceholderText="Type title to search (e.g. Frieren, Chainsaw Man)..."
+                                 FontSize="13" />
+                    </Grid>
+
+                    <!-- Status / Notification Banners -->
+                    <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,10">
+                        <ProgressBar IsIndeterminate="True"
+                                     IsVisible="{Binding IsLoading}"
+                                     Height="3"
+                                     Foreground="{StaticResource AppAccentBrush}" />
+
+                        <!-- Error Banner -->
+                        <Border IsVisible="{Binding SearchErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Background="#3a1c1c"
+                                BorderBrush="#ef4444"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12,8">
+                            <TextBlock Text="{Binding SearchErrorMessage}" Foreground="#fca5a5" FontSize="12" />
+                        </Border>
+
+                        <!-- Action/Duplicate Warning Banner -->
+                        <Border IsVisible="{Binding ActionMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Background="#3a2e1c"
+                                BorderBrush="#f59e0b"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12,8">
+                            <TextBlock Text="{Binding ActionMessage}" Foreground="#fde68a" FontSize="12" />
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Results List -->
+                    <Border Grid.Row="2"
+                            Background="{StaticResource AppSurfaceBrush}"
+                            BorderBrush="{StaticResource AppBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            ClipToBounds="True">
+                        <ListBox ItemsSource="{Binding SearchResults}"
+                                 SelectedItem="{Binding SelectedSearchResult}"
+                                 Background="Transparent">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="jikan:JikanSearchResult">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="6,4">
+                                        <StackPanel Grid.Column="0" Spacing="4">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" />
+                                            <TextBlock Text="{Binding EnglishTitle}"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                       IsVisible="{Binding EnglishTitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <TextBlock Text="{Binding TotalCount, StringFormat='Count: {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                           IsVisible="{Binding TotalCount, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                <TextBlock Text="{Binding Score, StringFormat='★ {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="#fbbf24"
+                                                           FontWeight="SemiBold"
+                                                           IsVisible="{Binding Score, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                <TextBlock Text="{Binding Year, StringFormat='Year: {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                           IsVisible="{Binding Year, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                        <Border Grid.Column="1"
+                                                Background="{StaticResource AppBorderBrush}"
+                                                CornerRadius="4"
+                                                Padding="6,2"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding MalType}" FontSize="10" TextElement.FontWeight="Bold" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
+
+                    <!-- Catalog Action Buttons -->
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,16,0,0">
+                        <Button Content="Cancel" Command="{Binding CancelCommand}" CornerRadius="6" Padding="16,8" />
+                        <Button Content="+ Add to Library"
+                                Command="{Binding AddSelectedCatalogTitleCommand}"
+                                Background="{StaticResource AppAccentBrush}"
+                                Foreground="White"
+                                FontWeight="SemiBold"
+                                CornerRadius="6"
+                                Padding="16,8" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 2: MANUAL ENTRY -->
+            <TabItem Header="Manual Entry">
+                <ScrollViewer Margin="0,16,0,0">
+                    <StackPanel Spacing="14" MaxWidth="600" HorizontalAlignment="Left">
+                        <!-- Title Field -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Title *" FontWeight="SemiBold" FontSize="13" />
+                            <TextBox Text="{Binding ManualTitle, Mode=TwoWay}"
+                                     PlaceholderText="Enter anime, manga, or manhwa title..." />
+                        </StackPanel>
+
+                        <!-- Media Type -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Media Type *" FontWeight="SemiBold" FontSize="13" />
+                            <ComboBox SelectedItem="{Binding ManualMediaType}" Width="200">
+                                <models:MediaType>Anime</models:MediaType>
+                                <models:MediaType>Manga</models:MediaType>
+                                <models:MediaType>Manhwa</models:MediaType>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Total Episodes / Chapters -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Total Episodes / Chapters (Optional)" FontWeight="SemiBold" FontSize="13" />
+                            <NumericUpDown Value="{Binding ManualTotalProgress, Mode=TwoWay}"
+                                           Minimum="0"
+                                           Maximum="10000"
+                                           FormatString="0"
+                                           Width="200"
+                                           HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <!-- Genres -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Genres (Optional, comma-separated)" FontWeight="SemiBold" FontSize="13" />
+                            <TextBox Text="{Binding ManualGenres, Mode=TwoWay}"
+                                     PlaceholderText="e.g. Action, Fantasy, Adventure" />
+                        </StackPanel>
+
+                        <!-- Synopsis -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Synopsis (Optional)" FontWeight="SemiBold" FontSize="13" />
+                            <TextBox Text="{Binding ManualSynopsis, Mode=TwoWay}"
+                                     AcceptsReturn="True"
+                                     Height="80"
+                                     TextWrapping="Wrap"
+                                     PlaceholderText="Brief plot summary or notes..." />
+                        </StackPanel>
+
+                        <!-- Validation Error -->
+                        <Border IsVisible="{Binding ManualErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Background="#3a1c1c"
+                                BorderBrush="#ef4444"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12,8">
+                            <TextBlock Text="{Binding ManualErrorMessage}" Foreground="#fca5a5" FontSize="12" />
+                        </Border>
+
+                        <!-- Warning Message -->
+                        <Border IsVisible="{Binding ManualWarningMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Background="#3a2e1c"
+                                BorderBrush="#f59e0b"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12,8">
+                            <TextBlock Text="{Binding ManualWarningMessage}" Foreground="#fde68a" FontSize="12" />
+                        </Border>
+
+                        <!-- Action Buttons -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,10,0,16">
+                            <Button Content="Cancel" Command="{Binding CancelCommand}" CornerRadius="6" Padding="16,8" />
+                            <Button Content="+ Save Title"
+                                    Command="{Binding AddManualTitleCommand}"
+                                    Background="{StaticResource AppAccentBrush}"
+                                    Foreground="White"
+                                    FontWeight="SemiBold"
+                                    CornerRadius="6"
+                                    Padding="16,8" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

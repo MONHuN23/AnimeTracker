@@ -1,0 +1,29 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="AnimeTracker.App"
+             RequestedThemeVariant="Dark">
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+
+    <Application.Resources>
+        <!-- Dark graphite and purple accent palette -->
+        <Color x:Key="AppBackground">#141418</Color>
+        <Color x:Key="AppSurface">#1c1c24</Color>
+        <Color x:Key="AppSurfaceHover">#262632</Color>
+        <Color x:Key="AppBorder">#2e2e3e</Color>
+        <Color x:Key="AppAccent">#8b5cf6</Color>
+        <Color x:Key="AppAccentHover">#a78bfa</Color>
+        <Color x:Key="AppTextPrimary">#f3f4f6</Color>
+        <Color x:Key="AppTextSecondary">#9ca3af</Color>
+
+        <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppBackground}" />
+        <SolidColorBrush x:Key="AppSurfaceBrush" Color="{StaticResource AppSurface}" />
+        <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="{StaticResource AppSurfaceHover}" />
+        <SolidColorBrush x:Key="AppBorderBrush" Color="{StaticResource AppBorder}" />
+        <SolidColorBrush x:Key="AppAccentBrush" Color="{StaticResource AppAccent}" />
+        <SolidColorBrush x:Key="AppAccentHoverBrush" Color="{StaticResource AppAccentHover}" />
+        <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="{StaticResource AppTextPrimary}" />
+        <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="{StaticResource AppTextSecondary}" />
+    </Application.Resources>
+</Application>

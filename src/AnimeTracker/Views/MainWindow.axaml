@@ -1,0 +1,631 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:AnimeTracker.ViewModels"
+        xmlns:models="using:AnimeTracker.Models"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+        x:Class="AnimeTracker.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="AnimeTracker"
+        Width="1100" Height="700"
+        MinWidth="850" MinHeight="550"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource AppBackgroundBrush}"
+        Foreground="{StaticResource AppTextPrimaryBrush}">
+
+    <Window.Styles>
+        <Style Selector="Button.nav">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource AppTextSecondaryBrush}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Margin" Value="0,2" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+        <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AppSurfaceHoverBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource AppTextPrimaryBrush}" />
+        </Style>
+        <Style Selector="Border.badge">
+            <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="6,2" />
+        </Style>
+        <Style Selector="Border.media-card:pointerover">
+            <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
+        </Style>
+        <Style Selector="Button.card-link">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.card-link:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+    </Window.Styles>
+
+    <Grid ColumnDefinitions="260,*">
+        <!-- Sidebar Navigation (Option B) -->
+        <Border Grid.Column="0"
+                Background="{StaticResource AppSurfaceBrush}"
+                BorderBrush="{StaticResource AppBorderBrush}"
+                BorderThickness="0,0,1,0"
+                Padding="16">
+            <DockPanel LastChildFill="True">
+                <!-- App Header -->
+                <StackPanel DockPanel.Dock="Top" Spacing="16" Margin="0,0,0,16">
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Border Width="28" Height="28" CornerRadius="6" Background="{StaticResource AppAccentBrush}">
+                            <TextBlock Text="AT"
+                                       Foreground="White"
+                                       FontWeight="Bold"
+                                       FontSize="12"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="AnimeTracker"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource AppTextPrimaryBrush}" />
+                    </StackPanel>
+
+                    <!-- Add Title Action Button -->
+                    <Button HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Background="{StaticResource AppAccentBrush}"
+                            Foreground="White"
+                            FontWeight="SemiBold"
+                            CornerRadius="8"
+                            Padding="0,10"
+                            Command="{Binding OpenAddTitleCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="+" FontSize="14" FontWeight="Bold" />
+                            <TextBlock Text="Add Title" FontSize="13" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- Navigation List -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="LIBRARY"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource AppTextSecondaryBrush}"
+                                   Margin="8,8,8,6" />
+
+                        <!-- Active View -->
+                        <Button Classes="nav" Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:NavigationSection.CurrentlyActive}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Currently Active" VerticalAlignment="Center" />
+                                <Border Grid.Column="1" Classes="badge">
+                                    <TextBlock Text="{Binding ActiveCount}" FontSize="11" Foreground="{StaticResource AppAccentHoverBrush}" />
+                                </Border>
+                            </Grid>
+                        </Button>
+
+                        <!-- All Library -->
+                        <Button Classes="nav" Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:NavigationSection.AllLibrary}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="All Library" VerticalAlignment="Center" />
+                                <Border Grid.Column="1" Classes="badge">
+                                    <TextBlock Text="{Binding TotalLibraryCount}" FontSize="11" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                </Border>
+                            </Grid>
+                        </Button>
+
+                        <!-- Plan to Watch/Read -->
+                        <Button Classes="nav" Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:NavigationSection.PlanToWatchRead}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Plan to Watch / Read" VerticalAlignment="Center" />
+                                <Border Grid.Column="1" Classes="badge">
+                                    <TextBlock Text="{Binding PlanToCount}" FontSize="11" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                </Border>
+                            </Grid>
+                        </Button>
+
+                        <!-- Completed -->
+                        <Button Classes="nav" Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:NavigationSection.Completed}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Completed" VerticalAlignment="Center" />
+                                <Border Grid.Column="1" Classes="badge">
+                                    <TextBlock Text="{Binding CompletedCount}" FontSize="11" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                </Border>
+                            </Grid>
+                        </Button>
+
+                        <!-- On Hold / Dropped -->
+                        <Button Classes="nav" Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:NavigationSection.OnHoldDropped}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="On Hold / Dropped" VerticalAlignment="Center" />
+                                <Border Grid.Column="1" Classes="badge">
+                                    <TextBlock Text="{Binding OnHoldDroppedCount}" FontSize="11" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                </Border>
+                            </Grid>
+                        </Button>
+
+                        <!-- Divider -->
+                        <Rectangle Height="1" Fill="{StaticResource AppBorderBrush}" Margin="8,12" />
+
+                        <TextBlock Text="DISCOVER &amp; SYSTEM"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource AppTextSecondaryBrush}"
+                                   Margin="8,4,8,6" />
+
+                        <!-- Recommendations -->
+                        <Button Classes="nav" Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:NavigationSection.Recommendations}">
+                            <TextBlock Text="Recommendations" VerticalAlignment="Center" />
+                        </Button>
+
+                        <!-- Settings & Backup -->
+                        <Button Classes="nav" Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:NavigationSection.SettingsAndBackup}">
+                            <TextBlock Text="Settings &amp; Backup" VerticalAlignment="Center" />
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <!-- Main Content Area -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*">
+            <!-- Top Action / Filter Bar -->
+            <Border Grid.Row="0"
+                    BorderBrush="{StaticResource AppBorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="24,16">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="{Binding CurrentSectionTitle}"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource AppTextPrimaryBrush}" />
+                        <TextBlock Text="Track and manage your titles effortlessly"
+                                   FontSize="12"
+                                   Foreground="{StaticResource AppTextSecondaryBrush}" />
+                    </StackPanel>
+
+                    <!-- Filter & Sort Controls -->
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="10"
+                                VerticalAlignment="Center"
+                                IsVisible="{Binding IsContentSection}">
+                        <!-- Search Box -->
+                        <TextBox Width="200"
+                                 Text="{Binding SearchText, Mode=TwoWay}"
+                                 PlaceholderText="Search titles..."
+                                 Background="{StaticResource AppSurfaceBrush}"
+                                 BorderBrush="{StaticResource AppBorderBrush}"
+                                 CornerRadius="6"
+                                 FontSize="13" />
+
+                        <!-- Media Type Filter -->
+                        <ComboBox SelectedItem="{Binding SelectedMediaTypeFilter}"
+                                  Background="{StaticResource AppSurfaceBrush}"
+                                  BorderBrush="{StaticResource AppBorderBrush}"
+                                  CornerRadius="6"
+                                  FontSize="13"
+                                  Width="120">
+                            <vm:MediaTypeFilter>All</vm:MediaTypeFilter>
+                            <vm:MediaTypeFilter>Anime</vm:MediaTypeFilter>
+                            <vm:MediaTypeFilter>Manga</vm:MediaTypeFilter>
+                            <vm:MediaTypeFilter>Manhwa</vm:MediaTypeFilter>
+                        </ComboBox>
+
+                        <!-- Sort Order -->
+                        <ComboBox SelectedItem="{Binding SelectedSortOrder}"
+                                  Background="{StaticResource AppSurfaceBrush}"
+                                  BorderBrush="{StaticResource AppBorderBrush}"
+                                  CornerRadius="6"
+                                  FontSize="13"
+                                  Width="130">
+                            <vm:MediaSortOrder>LastUpdated</vm:MediaSortOrder>
+                            <vm:MediaSortOrder>Title</vm:MediaSortOrder>
+                            <vm:MediaSortOrder>Score</vm:MediaSortOrder>
+                            <vm:MediaSortOrder>Progress</vm:MediaSortOrder>
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Main Content Area (Cards Grid / Empty State / Non-content Section) -->
+            <Grid Grid.Row="1" Margin="20">
+                <!-- 1. Active Cards Grid View -->
+                <ScrollViewer IsVisible="{Binding IsContentSection}" VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <!-- Grid of Cards when items exist -->
+                        <ItemsControl ItemsSource="{Binding FilteredItems}"
+                                      IsVisible="{Binding !IsEmpty}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MediaCardViewModel">
+                                    <Border Classes="media-card"
+                                            Width="210"
+                                            Margin="8"
+                                            Background="{StaticResource AppSurfaceBrush}"
+                                            BorderBrush="{StaticResource AppBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            ClipToBounds="True">
+                                        <Grid RowDefinitions="140,*">
+                                            <!-- Poster Cover Area with Placeholder (Clickable to open details) -->
+                                            <Button Grid.Row="0"
+                                                    Classes="card-link"
+                                                    Command="{Binding ((vm:MainWindowViewModel)DataContext).OpenDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Stretch"
+                                                    HorizontalContentAlignment="Stretch"
+                                                    VerticalContentAlignment="Stretch">
+                                                <Grid Background="#181824" ClipToBounds="True">
+                                                    <!-- Cover Image when loaded -->
+                                                    <Image Source="{Binding CoverImage}"
+                                                           Stretch="UniformToFill"
+                                                           IsVisible="{Binding CoverImage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+                                                    <!-- Fallback Placeholder when image is missing or loading -->
+                                                    <Border IsVisible="{Binding CoverImage, Converter={x:Static ObjectConverters.IsNull}}"
+                                                            Background="#1e1e2c">
+                                                        <TextBlock Text="★"
+                                                                   FontSize="32"
+                                                                   Foreground="#3b3b4f"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center" />
+                                                    </Border>
+
+                                                    <!-- Type Badge (Top-Left) -->
+                                                    <Border Background="#cc000000"
+                                                            CornerRadius="4"
+                                                            Padding="5,2"
+                                                            Margin="6"
+                                                            HorizontalAlignment="Left"
+                                                            VerticalAlignment="Top">
+                                                        <TextBlock Text="{Binding TypeDisplay}"
+                                                                   FontSize="10"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="#cbd5e1" />
+                                                    </Border>
+
+                                                    <!-- Score Badge (Top-Right) -->
+                                                    <Border IsVisible="{Binding ScoreDisplay, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                            Background="#cc000000"
+                                                            CornerRadius="4"
+                                                            Padding="5,2"
+                                                            Margin="6"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top">
+                                                        <TextBlock Text="{Binding ScoreDisplay}"
+                                                                   FontSize="10"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="#fbbf24" />
+                                                    </Border>
+                                                </Grid>
+                                            </Button>
+
+                                            <!-- Card Info and Stepper -->
+                                            <StackPanel Grid.Row="1" Margin="12,10" Spacing="4">
+                                                <Button Classes="card-link"
+                                                        Command="{Binding ((vm:MainWindowViewModel)DataContext).OpenDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        HorizontalAlignment="Left"
+                                                        HorizontalContentAlignment="Left">
+                                                    <TextBlock Text="{Binding Title}"
+                                                               FontSize="13"
+                                                               FontWeight="SemiBold"
+                                                               MaxLines="2"
+                                                               TextWrapping="Wrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Foreground="{StaticResource AppTextPrimaryBrush}" />
+                                                </Button>
+
+                                                <TextBlock Text="{Binding Status}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource AppTextSecondaryBrush}" />
+
+                                                <!-- Inline + / - Progress Stepper -->
+                                                <Border Background="{StaticResource AppBackgroundBrush}"
+                                                        BorderBrush="{StaticResource AppBorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="6"
+                                                        Padding="2"
+                                                        Margin="0,6,0,0">
+                                                    <Grid ColumnDefinitions="28,*,28">
+                                                        <Button Grid.Column="0"
+                                                                Content="−"
+                                                                Command="{Binding DecrementProgressCommand}"
+                                                                HorizontalContentAlignment="Center"
+                                                                Background="Transparent"
+                                                                Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                                Padding="0"
+                                                                Height="26" />
+
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding ProgressDisplay}"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   FontSize="11"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource AppAccentHoverBrush}" />
+
+                                                        <Button Grid.Column="2"
+                                                                Content="+"
+                                                                Command="{Binding IncrementProgressCommand}"
+                                                                HorizontalContentAlignment="Center"
+                                                                Background="Transparent"
+                                                                Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                                Padding="0"
+                                                                Height="26" />
+                                                    </Grid>
+                                                </Border>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Empty State message -->
+                        <Grid HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              IsVisible="{Binding IsEmpty}"
+                              Margin="0,60,0,0">
+                            <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="400">
+                                <Border Width="56" Height="56"
+                                        Background="{StaticResource AppSurfaceBrush}"
+                                        BorderBrush="{StaticResource AppBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="14"
+                                        HorizontalAlignment="Center">
+                                    <TextBlock Text="📁"
+                                               FontSize="24"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Border>
+
+                                <TextBlock Text="No titles found in this view"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{StaticResource AppTextPrimaryBrush}" />
+
+                                <TextBlock Text="Try clearing your search text, changing the status filter, or click '+ Add Title' on the left sidebar to add new titles."
+                                           FontSize="13"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Center"
+                                           Foreground="{StaticResource AppTextSecondaryBrush}" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </ScrollViewer>
+
+                <!-- 2. Recommendations Section -->
+                <Grid IsVisible="{Binding IsRecommendationsSection}" RowDefinitions="Auto,*" Margin="24">
+                    <!-- Recommendations Filter Toolbar -->
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,16">
+                        <!-- Media Type Filter -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Type:"
+                                       VerticalAlignment="Center"
+                                       FontSize="13"
+                                       Foreground="{StaticResource AppTextSecondaryBrush}" />
+                            <ComboBox SelectedItem="{Binding SelectedMediaTypeFilter}"
+                                      Background="{StaticResource AppSurfaceBrush}"
+                                      BorderBrush="{StaticResource AppBorderBrush}"
+                                      CornerRadius="6"
+                                      Width="120">
+                                <vm:MediaTypeFilter>All</vm:MediaTypeFilter>
+                                <vm:MediaTypeFilter>Anime</vm:MediaTypeFilter>
+                                <vm:MediaTypeFilter>Manga</vm:MediaTypeFilter>
+                                <vm:MediaTypeFilter>Manhwa</vm:MediaTypeFilter>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Genre Filter -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="Genre:"
+                                       VerticalAlignment="Center"
+                                       FontSize="13"
+                                       Foreground="{StaticResource AppTextSecondaryBrush}" />
+                            <ComboBox ItemsSource="{Binding TopFavoriteGenres}"
+                                      SelectedItem="{Binding SelectedRecommendationGenre, Mode=TwoWay}"
+                                      Background="{StaticResource AppSurfaceBrush}"
+                                      BorderBrush="{StaticResource AppBorderBrush}"
+                                      CornerRadius="6"
+                                      Width="160" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="3"
+                                   Text="Backlog recommendations based on your favorite genres from titles rated 8/10 or higher"
+                                   FontSize="12"
+                                   FontStyle="Italic"
+                                   Foreground="{StaticResource AppTextSecondaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+
+                    <!-- Recommendations List / Cards -->
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <Grid>
+                            <!-- Recommendations Card Grid -->
+                            <ItemsControl ItemsSource="{Binding Recommendations}"
+                                          IsVisible="{Binding HasRecommendations}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RecommendationCardViewModel">
+                                        <Border Classes="media-card"
+                                                Width="230"
+                                                Margin="8"
+                                                Background="{StaticResource AppSurfaceBrush}"
+                                                BorderBrush="{StaticResource AppBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="10"
+                                                ClipToBounds="True">
+                                            <Grid RowDefinitions="150,*">
+                                                <!-- Clickable Poster Area -->
+                                                <Button Grid.Row="0"
+                                                        Classes="card-link"
+                                                        Command="{Binding ((vm:MainWindowViewModel)DataContext).OpenRecommendationDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        HorizontalAlignment="Stretch"
+                                                        VerticalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        VerticalContentAlignment="Stretch">
+                                                    <Grid Background="#181824" ClipToBounds="True">
+                                                        <Image Source="{Binding CoverImage}"
+                                                               Stretch="UniformToFill"
+                                                               IsVisible="{Binding CoverImage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                        <Border IsVisible="{Binding CoverImage, Converter={x:Static ObjectConverters.IsNull}}"
+                                                                Background="#1e1e2c">
+                                                            <TextBlock Text="★"
+                                                                       FontSize="36"
+                                                                       Foreground="#3b3b4f"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center" />
+                                                        </Border>
+                                                        <!-- Type Badge (Top-Left) -->
+                                                        <Border Background="#cc000000"
+                                                                CornerRadius="4"
+                                                                Padding="5,2"
+                                                                Margin="6"
+                                                                HorizontalAlignment="Left"
+                                                                VerticalAlignment="Top">
+                                                            <TextBlock Text="{Binding TypeDisplay}"
+                                                                       FontSize="10"
+                                                                       FontWeight="Bold"
+                                                                       Foreground="#cbd5e1" />
+                                                        </Border>
+                                                        <!-- Match Score Badge (Top-Right) -->
+                                                        <Border Background="#cc8b5cf6"
+                                                                CornerRadius="4"
+                                                                Padding="6,2"
+                                                                Margin="6"
+                                                                HorizontalAlignment="Right"
+                                                                VerticalAlignment="Top">
+                                                            <TextBlock Text="{Binding MatchScoreDisplay}"
+                                                                       FontSize="10"
+                                                                       FontWeight="Bold"
+                                                                       Foreground="White" />
+                                                        </Border>
+                                                    </Grid>
+                                                </Button>
+
+                                                <!-- Card Info & Factual Reason -->
+                                                <StackPanel Grid.Row="1" Margin="12,10" Spacing="6">
+                                                    <Button Classes="card-link"
+                                                            Command="{Binding ((vm:MainWindowViewModel)DataContext).OpenRecommendationDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            HorizontalAlignment="Left"
+                                                            HorizontalContentAlignment="Left">
+                                                        <TextBlock Text="{Binding Title}"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   MaxLines="2"
+                                                                   TextWrapping="Wrap"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Foreground="{StaticResource AppTextPrimaryBrush}" />
+                                                    </Button>
+
+                                                    <!-- Factual Reason Badge -->
+                                                    <Border Background="{StaticResource AppBackgroundBrush}"
+                                                            BorderBrush="{StaticResource AppBorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="6"
+                                                            Padding="8,6">
+                                                        <TextBlock Text="{Binding Reason}"
+                                                                   FontSize="11"
+                                                                   Foreground="{StaticResource AppAccentHoverBrush}"
+                                                                   TextWrapping="Wrap" />
+                                                    </Border>
+
+                                                    <TextBlock Text="{Binding ProgressDisplay}"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Empty State message -->
+                            <Grid HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  IsVisible="{Binding !HasRecommendations}"
+                                  Margin="0,60,0,0">
+                                <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="440">
+                                    <Border Width="56" Height="56"
+                                            Background="{StaticResource AppSurfaceBrush}"
+                                            BorderBrush="{StaticResource AppBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="14"
+                                            HorizontalAlignment="Center">
+                                        <TextBlock Text="💡"
+                                                   FontSize="24"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <TextBlock Text="No recommendations available"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               Foreground="{StaticResource AppTextPrimaryBrush}" />
+
+                                    <TextBlock Text="{Binding RecommendationEmptyMessage}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap"
+                                               TextAlignment="Center"
+                                               Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- 3. Settings & Backup Section Placeholder -->
+                <Grid HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      IsVisible="{Binding IsSettingsAndBackupSection}">
+                    <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="420">
+                        <Border Width="56" Height="56"
+                                Background="{StaticResource AppSurfaceBrush}"
+                                BorderBrush="{StaticResource AppBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14"
+                                HorizontalAlignment="Center">
+                            <TextBlock Text="⚙"
+                                       FontSize="24"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Border>
+
+                        <TextBlock Text="{Binding CurrentSectionTitle}"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{StaticResource AppTextPrimaryBrush}" />
+
+                        <TextBlock Text="Settings &amp; Backup will be available in the upcoming implementation step."
+                                   FontSize="13"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   Foreground="{StaticResource AppTextSecondaryBrush}" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

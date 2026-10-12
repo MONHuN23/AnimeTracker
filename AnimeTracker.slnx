@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AnimeTracker/AnimeTracker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AnimeTracker.Tests/AnimeTracker.Tests.csproj" />
+  </Folder>
+</Solution>
