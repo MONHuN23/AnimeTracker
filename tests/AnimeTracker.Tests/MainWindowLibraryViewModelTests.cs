@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using AnimeTracker.Data;
 using AnimeTracker.Models;
 using AnimeTracker.Services;
+using AnimeTracker.Services.Backup;
 using AnimeTracker.Services.Jikan;
 using AnimeTracker.ViewModels;
 using Microsoft.Data.Sqlite;
@@ -46,7 +47,7 @@ public class MainWindowLibraryViewModelTests : IDisposable
 
     private MainWindowViewModel CreateViewModel()
     {
-        return new MainWindowViewModel(_repository, new JikanApiClient(), _trackingService);
+        return new MainWindowViewModel(_repository, new JikanApiClient(), _trackingService, new RecommendationService(), new BackupService(_connectionString));
     }
 
     [Fact]
@@ -291,5 +292,147 @@ public class MainWindowLibraryViewModelTests : IDisposable
         Assert.Single(vm.Recommendations);
         Assert.Equal("Candidate Backlog", vm.Recommendations[0].Title);
         Assert.Contains("Fantasy", vm.Recommendations[0].Reason);
+    }
+
+    [Fact]
+    public void SettingsAndBackupSection_SetsExpectedFlags()
+    {
+        var vm = CreateViewModel();
+        vm.SelectSection(NavigationSection.SettingsAndBackup);
+
+        Assert.True(vm.IsSettingsAndBackupSection);
+        Assert.False(vm.IsContentSection);
+        Assert.False(vm.IsRecommendationsSection);
+        Assert.Equal("Settings & Backup", vm.CurrentSectionTitle);
+    }
+
+    [Fact]
+    public async Task ExportToFileAsync_ExportsCurrentLibraryAndSetsSuccessMessage()
+    {
+        await _repository.AddAsync(new MediaItem { Title = "Export Target", Type = MediaType.Anime, Status = MediaStatus.Watching });
+        var vm = CreateViewModel();
+        await vm.LoadLibraryAsync();
+
+        var exportPath = Path.Combine(Path.GetTempPath(), $"animetracker_export_{Guid.NewGuid():N}.json");
+        try
+        {
+            await vm.ExportToFileAsync(exportPath);
+
+            Assert.True(File.Exists(exportPath));
+            Assert.NotNull(vm.BackupStatusMessage);
+            Assert.Contains("successfully exported", vm.BackupStatusMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Null(vm.BackupErrorMessage);
+        }
+        finally
+        {
+            if (File.Exists(exportPath)) File.Delete(exportPath);
+        }
+    }
+
+    [Fact]
+    public async Task PrepareImportFromFileAsync_ValidFile_EnablesConfirmation()
+    {
+        var importPath = Path.Combine(Path.GetTempPath(), $"animetracker_import_{Guid.NewGuid():N}.json");
+        try
+        {
+            var validJson = """
+            {
+              "version": 1,
+              "exportedAt": "2026-10-12T00:00:00Z",
+              "totalCount": 1,
+              "items": [
+                {
+                  "title": "Imported Anime",
+                  "type": "Anime",
+                  "status": "Watching",
+                  "currentProgress": 5,
+                  "totalProgress": 12
+                }
+              ]
+            }
+            """;
+            await File.WriteAllTextAsync(importPath, validJson);
+
+            var vm = CreateViewModel();
+            await vm.PrepareImportFromFileAsync(importPath);
+
+            Assert.True(vm.IsImportConfirming);
+            Assert.Equal(1, vm.ValidatedImportCount);
+            Assert.NotNull(vm.PendingImportItems);
+            Assert.Single(vm.PendingImportItems);
+            Assert.Null(vm.BackupErrorMessage);
+            Assert.Contains("validated", vm.BackupStatusMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (File.Exists(importPath)) File.Delete(importPath);
+        }
+    }
+
+    [Fact]
+    public async Task PrepareImportFromFileAsync_InvalidFile_SetsErrorMessage()
+    {
+        var importPath = Path.Combine(Path.GetTempPath(), $"animetracker_invalid_{Guid.NewGuid():N}.json");
+        try
+        {
+            var invalidJson = """{ "version": 2, "items": [] }""";
+            await File.WriteAllTextAsync(importPath, invalidJson);
+
+            var vm = CreateViewModel();
+            await vm.PrepareImportFromFileAsync(importPath);
+
+            Assert.False(vm.IsImportConfirming);
+            Assert.Null(vm.PendingImportItems);
+            Assert.NotNull(vm.BackupErrorMessage);
+            Assert.Contains("Unsupported backup format version", vm.BackupErrorMessage);
+        }
+        finally
+        {
+            if (File.Exists(importPath)) File.Delete(importPath);
+        }
+    }
+
+    [Fact]
+    public void CancelImport_ResetsConfirmationState()
+    {
+        var vm = CreateViewModel();
+        vm.IsImportConfirming = true;
+        vm.ValidatedImportCount = 5;
+        vm.PendingImportItems = new System.Collections.Generic.List<MediaItem> { new MediaItem { Title = "X" } };
+
+        vm.CancelImport();
+
+        Assert.False(vm.IsImportConfirming);
+        Assert.Equal(0, vm.ValidatedImportCount);
+        Assert.Null(vm.PendingImportItems);
+        Assert.Contains("cancelled", vm.BackupStatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ConfirmImportAsync_ReplacesLibraryAndRefreshesItems()
+    {
+        await _repository.AddAsync(new MediaItem { Title = "Old Item", Type = MediaType.Anime, Status = MediaStatus.Watching });
+        var vm = CreateViewModel();
+        await vm.LoadLibraryAsync();
+        Assert.Single(vm.FilteredItems);
+
+        vm.PendingImportItems = new System.Collections.Generic.List<MediaItem>
+        {
+            new MediaItem { Title = "New Replaced Item 1", Type = MediaType.Manga, Status = MediaStatus.Reading },
+            new MediaItem { Title = "New Replaced Item 2", Type = MediaType.Anime, Status = MediaStatus.Completed }
+        };
+        vm.IsImportConfirming = true;
+
+        await vm.ConfirmImportAsync();
+
+        Assert.False(vm.IsImportConfirming);
+        Assert.Null(vm.PendingImportItems);
+        Assert.Null(vm.BackupErrorMessage);
+        Assert.Contains("Successfully imported", vm.BackupStatusMessage);
+
+        var allDb = await _repository.GetAllAsync();
+        Assert.Equal(2, allDb.Count);
+        Assert.DoesNotContain(allDb, x => x.Title == "Old Item");
+        Assert.Contains(allDb, x => x.Title == "New Replaced Item 1");
     }
 }

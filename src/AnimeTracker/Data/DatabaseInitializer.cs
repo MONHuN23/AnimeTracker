@@ -6,10 +6,15 @@ namespace AnimeTracker.Data;
 
 public static class DatabaseInitializer
 {
-    public static string GetDefaultDatabasePath()
+    public static string GetDefaultDataDirectory()
     {
         var basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(basePath, "AnimeTracker", "library.db");
+        return Path.Combine(basePath, "AnimeTracker");
+    }
+
+    public static string GetDefaultDatabasePath()
+    {
+        return Path.Combine(GetDefaultDataDirectory(), "library.db");
     }
 
     public static string GetDefaultConnectionString()
@@ -50,6 +55,7 @@ public static class DatabaseInitializer
                 Score INTEGER,
                 RewatchCount INTEGER NOT NULL DEFAULT 0,
                 CoverImageUrl TEXT,
+                CoverImagePath TEXT,
                 Genres TEXT,
                 Synopsis TEXT,
                 ReleaseYear INTEGER,
@@ -62,5 +68,35 @@ public static class DatabaseInitializer
                 WHERE MalId IS NOT NULL AND MalType IS NOT NULL;
             """;
         cmd.ExecuteNonQuery();
+
+        // Migration check: Ensure CoverImagePath column exists in pre-existing tables
+        EnsureCoverImagePathColumnExists(connection);
+    }
+
+    private static void EnsureCoverImagePathColumnExists(SqliteConnection connection)
+    {
+        using var pragmaCmd = connection.CreateCommand();
+        pragmaCmd.CommandText = "PRAGMA table_info(MediaItems);";
+        using var reader = pragmaCmd.ExecuteReader();
+
+        var hasColumn = false;
+        while (reader.Read())
+        {
+            // Column 1 is the column name in PRAGMA table_info
+            var colName = reader.GetString(1);
+            if (string.Equals(colName, "CoverImagePath", StringComparison.OrdinalIgnoreCase))
+            {
+                hasColumn = true;
+                break;
+            }
+        }
+        reader.Close();
+
+        if (!hasColumn)
+        {
+            using var alterCmd = connection.CreateCommand();
+            alterCmd.CommandText = "ALTER TABLE MediaItems ADD COLUMN CoverImagePath TEXT;";
+            alterCmd.ExecuteNonQuery();
+        }
     }
 }

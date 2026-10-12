@@ -275,4 +275,81 @@ public class JikanApiClientTests
         var ex = await Assert.ThrowsAsync<JikanApiException>(() => client.SearchAnimeAsync("Naruto"));
         Assert.NotNull(ex.InnerException);
     }
+
+    [Fact]
+    public async Task SearchKitsuAsync_MapsKitsuJson_WithCategoriesAndAttributes()
+    {
+        var kitsuJson = """
+        {
+            "data": [
+                {
+                    "id": "54114",
+                    "type": "manga",
+                    "attributes": {
+                        "canonicalTitle": "Solo Leveling",
+                        "titles": { "en_us": "Solo Leveling" },
+                        "chapterCount": 201,
+                        "synopsis": "Sung Jinwoo becomes the shadow monarch.",
+                        "averageRating": "84.5",
+                        "startDate": "2018-03-04",
+                        "posterImage": {
+                            "large": "https://media.kitsu.app/manga/poster_images/54114/large.jpg"
+                        }
+                    },
+                    "relationships": {
+                        "categories": {
+                            "data": [
+                                { "id": "10", "type": "categories" }
+                            ]
+                        }
+                    }
+                }
+            ],
+            "included": [
+                {
+                    "id": "10",
+                    "type": "categories",
+                    "attributes": { "title": "Action" }
+                }
+            ]
+        }
+        """;
+
+        var kitsuHandler = new TestHttpMessageHandler
+        {
+            ResponseFactory = _ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(kitsuJson)
+            }
+        };
+        var kitsuHttpClient = new HttpClient(kitsuHandler) { BaseAddress = new Uri("https://kitsu.io/api/edge/") };
+        var client = new JikanApiClient(null, kitsuHttpClient);
+
+        var results = await client.SearchMangaAsync("Solo Leveling");
+
+        Assert.Single(results);
+        var item = results[0];
+        Assert.Equal(54114, item.MalId);
+        Assert.Equal("manga", item.MalType);
+        Assert.Equal("Solo Leveling", item.Title);
+        Assert.Equal(201, item.TotalCount);
+        Assert.Equal("Sung Jinwoo becomes the shadow monarch.", item.Synopsis);
+        Assert.Equal(8.45, item.Score);
+        Assert.Equal(2018, item.Year);
+        Assert.Equal("https://media.kitsu.app/manga/poster_images/54114/large.jpg", item.CoverImageUrl);
+        Assert.Equal(new[] { "Action" }, item.Genres);
+    }
+
+    [Fact]
+    public async Task SearchAnimeAsync_LiveCatalog_FindsOnePieceAndSoloLeveling()
+    {
+        var client = new JikanApiClient();
+        var animeResults = await client.SearchAnimeAsync("One Piece");
+        Assert.NotEmpty(animeResults);
+        Assert.Contains(animeResults, x => x.Title.Contains("One Piece", StringComparison.OrdinalIgnoreCase));
+
+        var mangaResults = await client.SearchMangaAsync("Solo Leveling");
+        Assert.NotEmpty(mangaResults);
+        Assert.Contains(mangaResults, x => x.Title.Contains("Solo Leveling", StringComparison.OrdinalIgnoreCase));
+    }
 }

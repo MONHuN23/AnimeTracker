@@ -33,11 +33,21 @@ public class MediaItem
     public int? Score { get; set; }
     public int RewatchCount { get; set; }
     public string? CoverImageUrl { get; set; }
+    public string? CoverImagePath { get; set; }
+    public byte[]? PendingCoverImageData { get; set; }
     public string? Genres { get; set; }
     public string? Synopsis { get; set; }
     public int? ReleaseYear { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    public bool TrySetProgress(int newProgress)
+    {
+        if (newProgress < 0) return false;
+        if (TotalProgress.HasValue && newProgress > TotalProgress.Value) return false;
+        CurrentProgress = newProgress;
+        return true;
+    }
 
     public bool TryIncrementProgress()
     {

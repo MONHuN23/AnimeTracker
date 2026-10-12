@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using AnimeTracker.Data;
 using AnimeTracker.Models;
 using AnimeTracker.Services;
+using AnimeTracker.Services.Backup;
 using AnimeTracker.Services.Jikan;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -47,9 +48,12 @@ public partial class MainWindowViewModel : ViewModelBase
     public JikanApiClient JikanClient { get; }
     public MediaTrackingService TrackingService { get; }
     public RecommendationService RecommendationService { get; }
+    public BackupService BackupService { get; }
 
     public event Func<Task>? OpenAddTitleRequested;
     public event Func<MediaItem, Task>? OpenDetailRequested;
+    public event Func<Task>? RequestExportRequested;
+    public event Func<Task>? RequestImportRequested;
 
     [ObservableProperty]
     private string _title = "AnimeTracker";
@@ -105,6 +109,21 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private int _onHoldDroppedCount = 0;
 
+    [ObservableProperty]
+    private string? _backupStatusMessage;
+
+    [ObservableProperty]
+    private string? _backupErrorMessage;
+
+    [ObservableProperty]
+    private bool _isImportConfirming;
+
+    [ObservableProperty]
+    private int _validatedImportCount;
+
+    [ObservableProperty]
+    private List<MediaItem>? _pendingImportItems;
+
     public ObservableCollection<MediaCardViewModel> FilteredItems { get; } = new();
     public ObservableCollection<RecommendationCardViewModel> Recommendations { get; } = new();
     public ObservableCollection<string> TopFavoriteGenres { get; } = new();
@@ -113,12 +132,14 @@ public partial class MainWindowViewModel : ViewModelBase
         MediaItemRepository? repository = null,
         JikanApiClient? jikanClient = null,
         MediaTrackingService? trackingService = null,
-        RecommendationService? recommendationService = null)
+        RecommendationService? recommendationService = null,
+        BackupService? backupService = null)
     {
         Repository = repository ?? new MediaItemRepository();
         JikanClient = jikanClient ?? new JikanApiClient();
         TrackingService = trackingService ?? new MediaTrackingService(Repository);
         RecommendationService = recommendationService ?? new RecommendationService();
+        BackupService = backupService ?? new BackupService(Repository.ConnectionString);
     }
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
@@ -164,6 +185,24 @@ public partial class MainWindowViewModel : ViewModelBase
         if (OpenAddTitleRequested != null)
         {
             await OpenAddTitleRequested.Invoke();
+        }
+    }
+
+    [RelayCommand]
+    public async Task RequestExportAsync()
+    {
+        if (RequestExportRequested != null)
+        {
+            await RequestExportRequested.Invoke();
+        }
+    }
+
+    [RelayCommand]
+    public async Task RequestImportAsync()
+    {
+        if (RequestImportRequested != null)
+        {
+            await RequestImportRequested.Invoke();
         }
     }
 
@@ -335,6 +374,84 @@ public partial class MainWindowViewModel : ViewModelBase
             (card.Status != MediaStatus.Watching && card.Status != MediaStatus.Reading))
         {
             ApplyFilter();
+        }
+    }
+
+    public async Task ExportToFileAsync(string filePath)
+    {
+        try
+        {
+            BackupErrorMessage = null;
+            BackupStatusMessage = null;
+            var items = await Repository.GetAllAsync();
+            await BackupService.ExportToFileAsync(filePath, items);
+            BackupStatusMessage = $"Library successfully exported ({items.Count} items) to {System.IO.Path.GetFileName(filePath)}.";
+        }
+        catch (Exception ex)
+        {
+            BackupErrorMessage = $"Export failed: {ex.Message}";
+        }
+    }
+
+    public async Task PrepareImportFromFileAsync(string filePath)
+    {
+        try
+        {
+            BackupErrorMessage = null;
+            BackupStatusMessage = null;
+            IsImportConfirming = false;
+            PendingImportItems = null;
+
+            var result = await BackupService.ValidateFileAsync(filePath);
+            if (!result.IsValid || result.ValidatedItems == null)
+            {
+                BackupErrorMessage = $"Import validation failed: {result.ErrorMessage}";
+                return;
+            }
+
+            PendingImportItems = result.ValidatedItems.ToList();
+            ValidatedImportCount = PendingImportItems.Count;
+            IsImportConfirming = true;
+            BackupStatusMessage = $"File validated: {ValidatedImportCount} valid items found. Confirmation required to replace library.";
+        }
+        catch (Exception ex)
+        {
+            BackupErrorMessage = $"Failed to validate file: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public void CancelImport()
+    {
+        PendingImportItems = null;
+        IsImportConfirming = false;
+        ValidatedImportCount = 0;
+        BackupStatusMessage = "Import cancelled. No changes were made to your library.";
+    }
+
+    [RelayCommand]
+    public async Task ConfirmImportAsync()
+    {
+        if (PendingImportItems == null || PendingImportItems.Count == 0)
+        {
+            IsImportConfirming = false;
+            return;
+        }
+
+        try
+        {
+            BackupErrorMessage = null;
+            var count = PendingImportItems.Count;
+            await BackupService.ImportReplaceAsync(PendingImportItems);
+            PendingImportItems = null;
+            IsImportConfirming = false;
+            ValidatedImportCount = 0;
+            await LoadLibraryAsync();
+            BackupStatusMessage = $"Successfully imported {count} items. Your library has been replaced.";
+        }
+        catch (Exception ex)
+        {
+            BackupErrorMessage = $"Database transaction failed during import: {ex.Message}";
         }
     }
 }

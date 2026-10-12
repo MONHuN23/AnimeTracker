@@ -54,4 +54,24 @@ public class MediaTrackingService
         await _repository.UpdateAsync(item);
         return item;
     }
+
+    public async Task<MediaItem> SetProgressAsync(int id, int progress)
+    {
+        var item = await _repository.GetByIdAsync(id)
+            ?? throw new KeyNotFoundException($"MediaItem with ID {id} not found.");
+
+        if (progress < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(progress), "Progress cannot be negative.");
+        }
+
+        if (item.TotalProgress.HasValue && progress > item.TotalProgress.Value)
+        {
+            throw new ArgumentOutOfRangeException(nameof(progress), $"Progress ({progress}) cannot exceed total progress ({item.TotalProgress.Value}).");
+        }
+
+        item.CurrentProgress = progress;
+        await _repository.UpdateAsync(item);
+        return item;
+    }
 }

@@ -17,6 +17,7 @@ public partial class MediaCardViewModel : ViewModelBase
     public string Title { get; }
     public MediaType Type { get; }
     public string? CoverImageUrl { get; }
+    public string? CoverImagePath { get; }
     public int? TotalProgress { get; }
     public int? Score { get; }
 
@@ -54,6 +55,7 @@ public partial class MediaCardViewModel : ViewModelBase
         Title = item.Title;
         Type = item.Type;
         CoverImageUrl = item.CoverImageUrl;
+        CoverImagePath = item.CoverImagePath;
         TotalProgress = item.TotalProgress;
         Score = item.Score;
 
@@ -64,30 +66,18 @@ public partial class MediaCardViewModel : ViewModelBase
 
     public void LoadCoverImage()
     {
-        if (CoverImage == null && !string.IsNullOrWhiteSpace(CoverImageUrl))
+        _ = LoadCoverImageAsync();
+    }
+
+    public async Task LoadCoverImageAsync()
+    {
+        if (CoverImage == null && (!string.IsNullOrWhiteSpace(CoverImagePath) || !string.IsNullOrWhiteSpace(CoverImageUrl)))
         {
-            _ = Task.Run(async () =>
+            var bmp = await ImageLoader.LoadCoverAsync(CoverImagePath, CoverImageUrl);
+            if (bmp != null)
             {
-                var bmp = await ImageLoader.LoadFromUrlAsync(CoverImageUrl);
-                if (bmp != null)
-                {
-                    try
-                    {
-                        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-                        {
-                            CoverImage = bmp;
-                        }
-                        else
-                        {
-                            Avalonia.Threading.Dispatcher.UIThread.Post(() => CoverImage = bmp);
-                        }
-                    }
-                    catch
-                    {
-                        CoverImage = bmp;
-                    }
-                }
-            });
+                CoverImage = bmp;
+            }
         }
     }
 

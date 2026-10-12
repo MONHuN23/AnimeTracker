@@ -1,11 +1,14 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AnimeTracker.Data;
 using AnimeTracker.Models;
+using AnimeTracker.Services;
 using AnimeTracker.Services.Jikan;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Data.Sqlite;
@@ -16,9 +19,11 @@ public partial class AddTitleViewModel : ViewModelBase
 {
     private readonly MediaItemRepository _repository;
     private readonly JikanApiClient _jikanClient;
+    private readonly CoverStorageService _coverStorageService;
     private CancellationTokenSource? _searchCts;
 
     public event EventHandler? RequestClose;
+    public Func<Task<string?>>? RequestSelectImageFile { get; set; }
 
     // Search catalog properties
     [ObservableProperty]
@@ -55,6 +60,9 @@ public partial class AddTitleViewModel : ViewModelBase
     private MediaType _manualMediaType = MediaType.Anime;
 
     [ObservableProperty]
+    private int _manualCurrentProgress = 0;
+
+    [ObservableProperty]
     private int? _manualTotalProgress;
 
     [ObservableProperty]
@@ -62,6 +70,12 @@ public partial class AddTitleViewModel : ViewModelBase
 
     [ObservableProperty]
     private string? _manualSynopsis;
+
+    [ObservableProperty]
+    private string? _manualCoverFilePath;
+
+    [ObservableProperty]
+    private Bitmap? _manualCoverPreview;
 
     [ObservableProperty]
     private string? _manualErrorMessage;
@@ -72,10 +86,16 @@ public partial class AddTitleViewModel : ViewModelBase
     [ObservableProperty]
     private bool _allowDuplicateTitleOverride;
 
-    public AddTitleViewModel(MediaItemRepository repository, JikanApiClient jikanClient)
+    public bool HasManualCover => ManualCoverPreview != null;
+
+    public AddTitleViewModel(
+        MediaItemRepository repository,
+        JikanApiClient jikanClient,
+        CoverStorageService? coverStorageService = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _jikanClient = jikanClient ?? throw new ArgumentNullException(nameof(jikanClient));
+        _coverStorageService = coverStorageService ?? new CoverStorageService();
     }
 
     partial void OnSearchQueryChanged(string value)
@@ -93,15 +113,24 @@ public partial class AddTitleViewModel : ViewModelBase
             _searchCts?.Cancel();
             _searchCts?.Dispose();
             _searchCts = new CancellationTokenSource();
-            _ = TriggerDebounceAsync(SearchQuery, _searchCts.Token);
+            _ = PerformSearchAsync(SearchQuery, _searchCts.Token);
         }
+    }
+
+    [RelayCommand]
+    public async Task SearchNowAsync()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = new CancellationTokenSource();
+        await PerformSearchAsync(SearchQuery, _searchCts.Token);
     }
 
     private async Task TriggerDebounceAsync(string query, CancellationToken cancellationToken)
     {
         try
         {
-            await Task.Delay(500, cancellationToken);
+            await Task.Delay(400, cancellationToken);
             await PerformSearchAsync(query, cancellationToken);
         }
         catch (OperationCanceledException)
@@ -216,6 +245,54 @@ public partial class AddTitleViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public async Task ChooseImageAsync()
+    {
+        if (RequestSelectImageFile != null)
+        {
+            var path = await RequestSelectImageFile.Invoke();
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                SetSelectedCoverFile(path);
+            }
+        }
+    }
+
+    [RelayCommand]
+    public void RemoveImage()
+    {
+        ManualCoverFilePath = null;
+        ManualCoverPreview = null;
+        OnPropertyChanged(nameof(HasManualCover));
+    }
+
+    public void SetSelectedCoverFile(string path)
+    {
+        if (!File.Exists(path))
+        {
+            ManualErrorMessage = "The selected file does not exist.";
+            return;
+        }
+
+        if (!_coverStorageService.ValidateFile(path, out var error))
+        {
+            ManualErrorMessage = error;
+            return;
+        }
+
+        var bitmap = ImageLoader.LoadFromFile(path);
+        if (bitmap == null)
+        {
+            ManualErrorMessage = "Failed to load image preview.";
+            return;
+        }
+
+        ManualCoverFilePath = path;
+        ManualCoverPreview = bitmap;
+        ManualErrorMessage = null;
+        OnPropertyChanged(nameof(HasManualCover));
+    }
+
+    [RelayCommand]
     public async Task<bool> AddManualTitleAsync()
     {
         ManualErrorMessage = null;
@@ -232,6 +309,18 @@ public partial class AddTitleViewModel : ViewModelBase
             return false;
         }
 
+        if (ManualCurrentProgress < 0)
+        {
+            ManualErrorMessage = "Progress cannot be negative.";
+            return false;
+        }
+
+        if (ManualTotalProgress.HasValue && ManualCurrentProgress > ManualTotalProgress.Value)
+        {
+            ManualErrorMessage = "Progress cannot exceed total progress.";
+            return false;
+        }
+
         // Soft duplicate check for manual title name
         var all = await _repository.GetAllAsync();
         var existing = all.FirstOrDefault(x => string.Equals(x.Title.Trim(), ManualTitle.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -242,15 +331,34 @@ public partial class AddTitleViewModel : ViewModelBase
             return false;
         }
 
+        var initialStatus = ManualCurrentProgress > 0
+            ? (ManualMediaType == MediaType.Anime ? MediaStatus.Watching : MediaStatus.Reading)
+            : (ManualMediaType == MediaType.Anime ? MediaStatus.PlanToWatch : MediaStatus.PlanToRead);
+
+        string? savedCoverPath = null;
+        if (!string.IsNullOrWhiteSpace(ManualCoverFilePath))
+        {
+            try
+            {
+                savedCoverPath = await _coverStorageService.SaveCoverFromFileAsync(ManualCoverFilePath);
+            }
+            catch (Exception ex)
+            {
+                ManualErrorMessage = $"Failed to save cover image: {ex.Message}";
+                return false;
+            }
+        }
+
         var item = new MediaItem
         {
             MalId = null,
             MalType = null,
             Title = ManualTitle.Trim(),
             Type = ManualMediaType,
-            Status = ManualMediaType == MediaType.Anime ? MediaStatus.PlanToWatch : MediaStatus.PlanToRead,
-            CurrentProgress = 0,
+            Status = initialStatus,
+            CurrentProgress = ManualCurrentProgress,
             TotalProgress = ManualTotalProgress,
+            CoverImagePath = savedCoverPath,
             Genres = string.IsNullOrWhiteSpace(ManualGenres) ? null : ManualGenres.Trim(),
             Synopsis = string.IsNullOrWhiteSpace(ManualSynopsis) ? null : ManualSynopsis.Trim(),
             Score = null,
@@ -266,6 +374,10 @@ public partial class AddTitleViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
+            if (savedCoverPath != null)
+            {
+                _coverStorageService.DeleteCover(savedCoverPath);
+            }
             ManualErrorMessage = $"Failed to save title: {ex.Message}";
             return false;
         }

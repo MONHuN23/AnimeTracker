@@ -18,6 +18,29 @@ public partial class AddTitleWindow : Window
         if (DataContext is AddTitleViewModel vm)
         {
             vm.RequestClose += (s, args) => Close(vm.WasAddedSuccessfully);
+            vm.RequestSelectImageFile = async () =>
+            {
+                var files = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Select Cover Image",
+                    AllowMultiple = false,
+                    FileTypeFilter =
+                    [
+                        new Avalonia.Platform.Storage.FilePickerFileType("Image Files (*.png, *.jpg, *.jpeg, *.webp)")
+                        {
+                            Patterns = ["*.png", "*.jpg", "*.jpeg", "*.webp"],
+                            MimeTypes = ["image/png", "image/jpeg", "image/webp"]
+                        }
+                    ]
+                });
+
+                if (files != null && files.Count > 0)
+                {
+                    return files[0].Path.LocalPath;
+                }
+
+                return null;
+            };
         }
     }
 }

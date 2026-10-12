@@ -266,4 +266,90 @@ public class MediaItemRepositoryTests : IDisposable
         var all = await repository.GetAllAsync();
         Assert.Equal(2, all.Count);
     }
+
+    [Fact]
+    public async Task AddAsync_WithCoverImagePath_PersistsAndRetrievesRelativePath()
+    {
+        DatabaseInitializer.Initialize(_connectionString);
+        var repository = new MediaItemRepository(_connectionString);
+
+        var item = new MediaItem
+        {
+            Title = "Solo Leveling Custom",
+            Type = MediaType.Manhwa,
+            Status = MediaStatus.Reading,
+            CoverImagePath = "covers/cover_abc123.png"
+        };
+
+        var id = await repository.AddAsync(item);
+        var retrieved = await repository.GetByIdAsync(id);
+
+        Assert.NotNull(retrieved);
+        Assert.Equal("covers/cover_abc123.png", retrieved.CoverImagePath);
+
+        // Update CoverImagePath
+        retrieved.CoverImagePath = "covers/cover_updated.jpg";
+        await repository.UpdateAsync(retrieved);
+
+        var updated = await repository.GetByIdAsync(id);
+        Assert.NotNull(updated);
+        Assert.Equal("covers/cover_updated.jpg", updated.CoverImagePath);
+    }
+
+    [Fact]
+    public async Task Migration_LegacyDatabaseWithoutCoverImagePath_MigratesCleanlyAndRetainsData()
+    {
+        // 1. Create legacy table without CoverImagePath column
+        using (var connection = new SqliteConnection(_connectionString))
+        {
+            connection.Open();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE MediaItems (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    MalId INTEGER,
+                    MalType TEXT,
+                    Title TEXT NOT NULL,
+                    Type TEXT NOT NULL,
+                    Status TEXT NOT NULL,
+                    CurrentProgress INTEGER NOT NULL DEFAULT 0,
+                    TotalProgress INTEGER,
+                    Score INTEGER,
+                    RewatchCount INTEGER NOT NULL DEFAULT 0,
+                    CoverImageUrl TEXT,
+                    Genres TEXT,
+                    Synopsis TEXT,
+                    ReleaseYear INTEGER,
+                    UpdatedAt TEXT NOT NULL,
+                    CreatedAt TEXT NOT NULL
+                );
+                INSERT INTO MediaItems (Title, Type, Status, CurrentProgress, UpdatedAt, CreatedAt)
+                VALUES ('Legacy Title', 'Anime', 'Watching', 3, '2026-01-01', '2026-01-01');
+                """;
+            cmd.ExecuteNonQuery();
+        }
+
+        // 2. Run DatabaseInitializer migration
+        DatabaseInitializer.Initialize(_connectionString);
+
+        // 3. Verify existing legacy data is intact
+        var repository = new MediaItemRepository(_connectionString);
+        var items = await repository.GetAllAsync();
+        Assert.Single(items);
+        Assert.Equal("Legacy Title", items[0].Title);
+        Assert.Null(items[0].CoverImagePath);
+
+        // 4. Verify we can now insert an item with CoverImagePath
+        var newItem = new MediaItem
+        {
+            Title = "Migrated Title With Cover",
+            Type = MediaType.Manga,
+            Status = MediaStatus.Reading,
+            CoverImagePath = "covers/test_migrated.png"
+        };
+        var id = await repository.AddAsync(newItem);
+        var retrieved = await repository.GetByIdAsync(id);
+        Assert.NotNull(retrieved);
+        Assert.Equal("covers/test_migrated.png", retrieved.CoverImagePath);
+    }
 }

@@ -15,8 +15,10 @@ public partial class MediaDetailViewModel : ViewModelBase
 {
     private readonly MediaItemRepository _repository;
     private readonly MediaTrackingService _trackingService;
+    private readonly CoverStorageService _coverStorageService;
 
     public event EventHandler? RequestClose;
+    public Func<Task<string?>>? RequestSelectImageFile { get; set; }
 
     public MediaItem Item { get; }
     public int Id => Item.Id;
@@ -60,6 +62,12 @@ public partial class MediaDetailViewModel : ViewModelBase
     private Bitmap? _coverImage;
 
     [ObservableProperty]
+    private string? _coverImagePath;
+
+    private string? _pendingNewCoverFilePath;
+    private bool _isCustomCoverRemoved;
+
+    [ObservableProperty]
     private string? _errorMessage;
 
     [ObservableProperty]
@@ -78,6 +86,12 @@ public partial class MediaDetailViewModel : ViewModelBase
 
     public bool CanRewatch => Status == MediaStatus.Completed;
 
+    public bool HasCustomCover => !string.IsNullOrWhiteSpace(CoverImagePath) || !string.IsNullOrWhiteSpace(_pendingNewCoverFilePath);
+
+    public string ProgressUnitLabel => Type == MediaType.Anime ? "Episode" : "Chapter";
+
+    public string CurrentProgressUnitLabel => Type == MediaType.Anime ? "Current Episode" : "Current Chapter";
+
     public string RewatchActionLabel => Type == MediaType.Anime ? "Start Rewatch" : "Start Reread";
 
     public string TypeDisplay => Type.ToString().ToUpperInvariant();
@@ -90,11 +104,13 @@ public partial class MediaDetailViewModel : ViewModelBase
     public MediaDetailViewModel(
         MediaItem item,
         MediaItemRepository repository,
-        MediaTrackingService trackingService)
+        MediaTrackingService trackingService,
+        CoverStorageService? coverStorageService = null)
     {
         Item = item ?? throw new ArgumentNullException(nameof(item));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _trackingService = trackingService ?? throw new ArgumentNullException(nameof(trackingService));
+        _coverStorageService = coverStorageService ?? new CoverStorageService();
 
         _title = item.Title;
         _status = item.Status;
@@ -106,6 +122,7 @@ public partial class MediaDetailViewModel : ViewModelBase
         _rewatchCount = item.RewatchCount;
         _updatedAt = item.UpdatedAt;
         _createdAt = item.CreatedAt;
+        _coverImagePath = item.CoverImagePath;
 
         if (item.Type == MediaType.Anime)
         {
@@ -148,30 +165,74 @@ public partial class MediaDetailViewModel : ViewModelBase
 
     public void LoadCoverImage()
     {
-        if (CoverImage == null && !string.IsNullOrWhiteSpace(CoverImageUrl))
+        _ = LoadCoverImageAsync();
+    }
+
+    public async Task LoadCoverImageAsync()
+    {
+        if (CoverImage == null && (!string.IsNullOrWhiteSpace(CoverImagePath) || !string.IsNullOrWhiteSpace(CoverImageUrl)))
         {
-            _ = Task.Run(async () =>
+            var bmp = await ImageLoader.LoadCoverAsync(CoverImagePath, CoverImageUrl);
+            if (bmp != null)
             {
-                var bmp = await ImageLoader.LoadFromUrlAsync(CoverImageUrl);
-                if (bmp != null)
-                {
-                    try
-                    {
-                        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-                        {
-                            CoverImage = bmp;
-                        }
-                        else
-                        {
-                            Avalonia.Threading.Dispatcher.UIThread.Post(() => CoverImage = bmp);
-                        }
-                    }
-                    catch
-                    {
-                        CoverImage = bmp;
-                    }
-                }
-            });
+                CoverImage = bmp;
+            }
+        }
+    }
+
+    [RelayCommand]
+    public async Task ChooseCoverImageAsync()
+    {
+        if (RequestSelectImageFile != null)
+        {
+            var path = await RequestSelectImageFile.Invoke();
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                SetSelectedCoverFile(path);
+            }
+        }
+    }
+
+    public void SetSelectedCoverFile(string path)
+    {
+        if (!System.IO.File.Exists(path))
+        {
+            ErrorMessage = "The selected file does not exist.";
+            return;
+        }
+
+        if (!_coverStorageService.ValidateFile(path, out var error))
+        {
+            ErrorMessage = error;
+            return;
+        }
+
+        var bitmap = ImageLoader.LoadFromFile(path);
+        if (bitmap == null)
+        {
+            ErrorMessage = "Failed to load image preview.";
+            return;
+        }
+
+        _pendingNewCoverFilePath = path;
+        _isCustomCoverRemoved = false;
+        CoverImage = bitmap;
+        ErrorMessage = null;
+        OnPropertyChanged(nameof(HasCustomCover));
+    }
+
+    [RelayCommand]
+    public void RemoveCustomCover()
+    {
+        _pendingNewCoverFilePath = null;
+        _isCustomCoverRemoved = true;
+        CoverImagePath = null;
+        CoverImage = null;
+        OnPropertyChanged(nameof(HasCustomCover));
+
+        if (!string.IsNullOrWhiteSpace(CoverImageUrl))
+        {
+            _ = LoadCoverImageAsync();
         }
     }
 
@@ -189,6 +250,18 @@ public partial class MediaDetailViewModel : ViewModelBase
         if (Score.HasValue && (Score.Value < 1 || Score.Value > 10))
         {
             ErrorMessage = "Score must be between 1 and 10.";
+            return false;
+        }
+
+        if (CurrentProgress < 0)
+        {
+            ErrorMessage = "Progress cannot be negative.";
+            return false;
+        }
+
+        if (TotalProgress.HasValue && CurrentProgress > TotalProgress.Value)
+        {
+            ErrorMessage = $"Current progress ({CurrentProgress}) cannot exceed total progress ({TotalProgress.Value}).";
             return false;
         }
 
@@ -216,8 +289,40 @@ public partial class MediaDetailViewModel : ViewModelBase
             return false;
         }
 
+        string? previousCoverToDelete = null;
+        string? newlySavedCoverPath = null;
+
+        if (!string.IsNullOrWhiteSpace(_pendingNewCoverFilePath))
+        {
+            try
+            {
+                newlySavedCoverPath = await _coverStorageService.SaveCoverFromFileAsync(_pendingNewCoverFilePath);
+                if (!string.IsNullOrWhiteSpace(Item.CoverImagePath))
+                {
+                    previousCoverToDelete = Item.CoverImagePath;
+                }
+                Item.CoverImagePath = newlySavedCoverPath;
+                CoverImagePath = newlySavedCoverPath;
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"Failed to save cover image: {ex.Message}";
+                return false;
+            }
+        }
+        else if (_isCustomCoverRemoved)
+        {
+            if (!string.IsNullOrWhiteSpace(Item.CoverImagePath))
+            {
+                previousCoverToDelete = Item.CoverImagePath;
+            }
+            Item.CoverImagePath = null;
+            CoverImagePath = null;
+        }
+
         Item.Title = Title.Trim();
         Item.Status = Status;
+        Item.CurrentProgress = CurrentProgress;
         Item.Score = Score;
         Item.TotalProgress = TotalProgress;
         Item.Genres = string.IsNullOrWhiteSpace(Genres) ? null : Genres.Trim();
@@ -226,10 +331,21 @@ public partial class MediaDetailViewModel : ViewModelBase
         var success = await _repository.UpdateAsync(Item);
         if (success)
         {
+            if (previousCoverToDelete != null)
+            {
+                _coverStorageService.DeleteCover(previousCoverToDelete);
+            }
+            _pendingNewCoverFilePath = null;
+            _isCustomCoverRemoved = false;
             WasSavedSuccessfully = true;
             HasUnsavedChangesOrActionOccurred = true;
             RequestClose?.Invoke(this, EventArgs.Empty);
             return true;
+        }
+
+        if (newlySavedCoverPath != null)
+        {
+            _coverStorageService.DeleteCover(newlySavedCoverPath);
         }
 
         ErrorMessage = "Failed to update item in database.";

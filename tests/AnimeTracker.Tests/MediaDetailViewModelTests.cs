@@ -18,6 +18,18 @@ public class MediaDetailViewModelTests : IDisposable
     private readonly MediaItemRepository _repository;
     private readonly MediaTrackingService _trackingService;
 
+    static MediaDetailViewModelTests()
+    {
+        try
+        {
+            Program.BuildAvaloniaApp().SetupWithoutStarting();
+        }
+        catch
+        {
+            // Already initialized
+        }
+    }
+
     public MediaDetailViewModelTests()
     {
         _tempDbPath = Path.Combine(Path.GetTempPath(), $"animetracker_detail_test_{Guid.NewGuid():N}.db");
@@ -406,5 +418,194 @@ public class MediaDetailViewModelTests : IDisposable
         Assert.Equal("Original Title", fresh!.Title);
         Assert.Equal(MediaStatus.Watching, fresh.Status);
         Assert.Equal(7, fresh.Score);
+    }
+
+    [Fact]
+    public async Task DirectProgressEditing_WhenValid_SavesToDatabaseOnSave()
+    {
+        var item = new MediaItem
+        {
+            Title = "One Piece",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching,
+            CurrentProgress = 50,
+            TotalProgress = null
+        };
+        await _repository.AddAsync(item);
+
+        var vm = new MediaDetailViewModel(item, _repository, _trackingService);
+        vm.CurrentProgress = 1100;
+
+        var saved = await vm.SaveAsync();
+
+        Assert.True(saved);
+        var fresh = await _repository.GetByIdAsync(item.Id);
+        Assert.Equal(1100, fresh!.CurrentProgress);
+    }
+
+    [Fact]
+    public async Task DirectProgressEditing_WhenNegative_RejectsWithErrorMessage()
+    {
+        var item = new MediaItem
+        {
+            Title = "Naruto",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching,
+            CurrentProgress = 10,
+            TotalProgress = 220
+        };
+        await _repository.AddAsync(item);
+
+        var vm = new MediaDetailViewModel(item, _repository, _trackingService);
+        vm.CurrentProgress = -3;
+
+        var saved = await vm.SaveAsync();
+
+        Assert.False(saved);
+        Assert.NotNull(vm.ErrorMessage);
+        Assert.Contains("negative", vm.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DirectProgressEditing_WhenExceedingTotal_RejectsWithErrorMessage()
+    {
+        var item = new MediaItem
+        {
+            Title = "Attack on Titan",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching,
+            CurrentProgress = 10,
+            TotalProgress = 25
+        };
+        await _repository.AddAsync(item);
+
+        var vm = new MediaDetailViewModel(item, _repository, _trackingService);
+        vm.CurrentProgress = 30;
+
+        var saved = await vm.SaveAsync();
+
+        Assert.False(saved);
+        Assert.NotNull(vm.ErrorMessage);
+        Assert.Contains("exceed", vm.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ProgressUnitLabel_ReturnsEpisodeForAnime_AndChapterForManga()
+    {
+        var anime = new MediaItem { Title = "Anime", Type = MediaType.Anime, Status = MediaStatus.Watching };
+        var manga = new MediaItem { Title = "Manga", Type = MediaType.Manga, Status = MediaStatus.Reading };
+        var manhwa = new MediaItem { Title = "Manhwa", Type = MediaType.Manhwa, Status = MediaStatus.Reading };
+
+        var animeVm = new MediaDetailViewModel(anime, _repository, _trackingService);
+        var mangaVm = new MediaDetailViewModel(manga, _repository, _trackingService);
+        var manhwaVm = new MediaDetailViewModel(manhwa, _repository, _trackingService);
+
+        Assert.Equal("Episode", animeVm.ProgressUnitLabel);
+        Assert.Equal("Chapter", mangaVm.ProgressUnitLabel);
+        Assert.Equal("Chapter", manhwaVm.ProgressUnitLabel);
+    }
+
+    [Fact]
+    public async Task SetSelectedCoverFile_ValidFile_SetsPreviewAndSavesOnSave()
+    {
+        var coversDir = Path.Combine(Path.GetTempPath(), $"animetracker_detailcovers_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(coversDir);
+        var storage = new CoverStorageService(coversDir);
+
+        var tempImageFile = Path.Combine(Path.GetTempPath(), $"temp_cover_{Guid.NewGuid():N}.png");
+        byte[] validPng =
+        [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+            0x42, 0x60, 0x82
+        ];
+        await File.WriteAllBytesAsync(tempImageFile, validPng);
+
+        try
+        {
+            var item = new MediaItem
+            {
+                Title = "Chainsaw Man",
+                Type = MediaType.Anime,
+                Status = MediaStatus.Watching
+            };
+            await _repository.AddAsync(item);
+
+            var vm = new MediaDetailViewModel(item, _repository, _trackingService, storage);
+            vm.SetSelectedCoverFile(tempImageFile);
+
+            Assert.True(vm.HasCustomCover);
+            Assert.NotNull(vm.CoverImage);
+
+            var saved = await vm.SaveAsync();
+            Assert.True(saved);
+
+            var fresh = await _repository.GetByIdAsync(item.Id);
+            Assert.NotNull(fresh!.CoverImagePath);
+            Assert.StartsWith("covers/", fresh.CoverImagePath!);
+            Assert.True(File.Exists(storage.GetFullPath(fresh.CoverImagePath!)));
+        }
+        finally
+        {
+            if (File.Exists(tempImageFile)) File.Delete(tempImageFile);
+            if (Directory.Exists(coversDir)) Directory.Delete(coversDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task RemoveCustomCover_RemovesCoverOnSave()
+    {
+        var coversDir = Path.Combine(Path.GetTempPath(), $"animetracker_detailcovers_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(coversDir);
+        var storage = new CoverStorageService(coversDir);
+
+        byte[] validPng =
+        [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+            0x42, 0x60, 0x82
+        ];
+        var savedRelativePath = await storage.SaveCoverAsync(validPng);
+
+        try
+        {
+            var item = new MediaItem
+            {
+                Title = "Solo Leveling",
+                Type = MediaType.Manhwa,
+                Status = MediaStatus.Reading,
+                CoverImagePath = savedRelativePath
+            };
+            await _repository.AddAsync(item);
+
+            var vm = new MediaDetailViewModel(item, _repository, _trackingService, storage);
+            Assert.True(vm.HasCustomCover);
+
+            vm.RemoveCustomCover();
+            Assert.False(vm.HasCustomCover);
+
+            var saved = await vm.SaveAsync();
+            Assert.True(saved);
+
+            var fresh = await _repository.GetByIdAsync(item.Id);
+            Assert.Null(fresh!.CoverImagePath);
+            Assert.False(File.Exists(storage.GetFullPath(savedRelativePath)));
+        }
+        finally
+        {
+            if (Directory.Exists(coversDir)) Directory.Delete(coversDir, true);
+        }
     }
 }

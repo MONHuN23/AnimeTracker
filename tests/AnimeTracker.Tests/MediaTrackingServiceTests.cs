@@ -258,4 +258,62 @@ public class MediaTrackingServiceTests : IDisposable
         Assert.Equal(1, reloaded.RewatchCount);
         Assert.Equal(364, reloaded.TotalProgress);
     }
+
+    [Fact]
+    public async Task SetProgressAsync_ValidValue_UpdatesProgressInRepository()
+    {
+        var item = new MediaItem
+        {
+            Title = "One Piece",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching,
+            CurrentProgress = 50,
+            TotalProgress = null
+        };
+        var id = await _repository.AddAsync(item);
+
+        var updated = await _service.SetProgressAsync(id, 1200);
+
+        Assert.Equal(1200, updated.CurrentProgress);
+        var fresh = await _repository.GetByIdAsync(id);
+        Assert.Equal(1200, fresh!.CurrentProgress);
+    }
+
+    [Fact]
+    public async Task SetProgressAsync_NegativeValue_ThrowsArgumentOutOfRangeException()
+    {
+        var item = new MediaItem
+        {
+            Title = "Frieren",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching,
+            CurrentProgress = 5,
+            TotalProgress = 28
+        };
+        var id = await _repository.AddAsync(item);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => _service.SetProgressAsync(id, -1));
+
+        var fresh = await _repository.GetByIdAsync(id);
+        Assert.Equal(5, fresh!.CurrentProgress);
+    }
+
+    [Fact]
+    public async Task SetProgressAsync_ExceedsTotalProgress_ThrowsArgumentOutOfRangeException()
+    {
+        var item = new MediaItem
+        {
+            Title = "Frieren",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching,
+            CurrentProgress = 5,
+            TotalProgress = 28
+        };
+        var id = await _repository.AddAsync(item);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => _service.SetProgressAsync(id, 29));
+
+        var fresh = await _repository.GetByIdAsync(id);
+        Assert.Equal(5, fresh!.CurrentProgress);
+    }
 }

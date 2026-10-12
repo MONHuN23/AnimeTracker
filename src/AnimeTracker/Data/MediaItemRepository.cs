@@ -47,6 +47,8 @@ public class MediaItemRepository
         _connectionString = connectionString ?? DatabaseInitializer.GetDefaultConnectionString();
     }
 
+    public string ConnectionString => _connectionString;
+
     private SqliteConnection CreateConnection() => new(_connectionString);
 
     public async Task<int> AddAsync(MediaItem item)
@@ -70,11 +72,11 @@ public class MediaItemRepository
         const string sql = """
             INSERT INTO MediaItems (
                 MalId, MalType, Title, Type, Status, CurrentProgress, TotalProgress,
-                Score, RewatchCount, CoverImageUrl, Genres, Synopsis, ReleaseYear,
+                Score, RewatchCount, CoverImageUrl, CoverImagePath, Genres, Synopsis, ReleaseYear,
                 UpdatedAt, CreatedAt
             ) VALUES (
                 @MalId, @MalType, @Title, @Type, @Status, @CurrentProgress, @TotalProgress,
-                @Score, @RewatchCount, @CoverImageUrl, @Genres, @Synopsis, @ReleaseYear,
+                @Score, @RewatchCount, @CoverImageUrl, @CoverImagePath, @Genres, @Synopsis, @ReleaseYear,
                 @UpdatedAt, @CreatedAt
             );
             SELECT last_insert_rowid();
@@ -92,7 +94,7 @@ public class MediaItemRepository
 
         const string sql = """
             SELECT Id, MalId, MalType, Title, Type, Status, CurrentProgress, TotalProgress,
-                   Score, RewatchCount, CoverImageUrl, Genres, Synopsis, ReleaseYear,
+                   Score, RewatchCount, CoverImageUrl, CoverImagePath, Genres, Synopsis, ReleaseYear,
                    UpdatedAt, CreatedAt
             FROM MediaItems
             WHERE Id = @Id;
@@ -108,7 +110,7 @@ public class MediaItemRepository
 
         const string sql = """
             SELECT Id, MalId, MalType, Title, Type, Status, CurrentProgress, TotalProgress,
-                   Score, RewatchCount, CoverImageUrl, Genres, Synopsis, ReleaseYear,
+                   Score, RewatchCount, CoverImageUrl, CoverImagePath, Genres, Synopsis, ReleaseYear,
                    UpdatedAt, CreatedAt
             FROM MediaItems
             WHERE MalId = @MalId AND MalType = @MalType;
@@ -124,7 +126,7 @@ public class MediaItemRepository
 
         const string sql = """
             SELECT Id, MalId, MalType, Title, Type, Status, CurrentProgress, TotalProgress,
-                   Score, RewatchCount, CoverImageUrl, Genres, Synopsis, ReleaseYear,
+                   Score, RewatchCount, CoverImageUrl, CoverImagePath, Genres, Synopsis, ReleaseYear,
                    UpdatedAt, CreatedAt
             FROM MediaItems
             ORDER BY UpdatedAt DESC;
@@ -155,6 +157,7 @@ public class MediaItemRepository
                 Score = @Score,
                 RewatchCount = @RewatchCount,
                 CoverImageUrl = @CoverImageUrl,
+                CoverImagePath = @CoverImagePath,
                 Genres = @Genres,
                 Synopsis = @Synopsis,
                 ReleaseYear = @ReleaseYear,

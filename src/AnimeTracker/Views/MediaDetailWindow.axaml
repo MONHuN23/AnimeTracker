@@ -112,6 +112,32 @@
                             </Grid>
                         </Border>
 
+                        <!-- Cover Image Actions -->
+                        <StackPanel Spacing="6">
+                            <Button Content="Choose Cover..."
+                                    Command="{Binding ChooseCoverImageCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Background="{StaticResource AppSurfaceHoverBrush}"
+                                    BorderBrush="{StaticResource AppBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,6"
+                                    FontSize="12" />
+                            <Button Content="Remove Custom Cover"
+                                    Command="{Binding RemoveCustomCoverCommand}"
+                                    IsVisible="{Binding HasCustomCover}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Background="Transparent"
+                                    BorderBrush="#ef4444"
+                                    Foreground="#f87171"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,6"
+                                    FontSize="12" />
+                        </StackPanel>
+
                         <!-- Progress Display with Steppers -->
                         <Border Background="{StaticResource AppBackgroundBrush}"
                                 BorderBrush="{StaticResource AppBorderBrush}"
@@ -266,10 +292,14 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" Spacing="6" Margin="10,0,0,0">
-                                <TextBlock Text="Current Progress (Read-Only here)" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource AppTextSecondaryBrush}" />
-                                <TextBox Text="{Binding CurrentProgress}"
-                                         IsReadOnly="True"
-                                         IsEnabled="False" />
+                                <TextBlock Text="{Binding CurrentProgressUnitLabel, StringFormat='{}{0} *'}"
+                                           FontWeight="SemiBold"
+                                           FontSize="13" />
+                                <NumericUpDown Value="{Binding CurrentProgress, Mode=TwoWay}"
+                                               Minimum="0"
+                                               Maximum="100000"
+                                               FormatString="0"
+                                               HorizontalAlignment="Stretch" />
                             </StackPanel>
                         </Grid>
 

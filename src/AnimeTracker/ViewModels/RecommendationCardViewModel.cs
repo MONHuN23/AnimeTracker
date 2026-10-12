@@ -17,6 +17,7 @@ public partial class RecommendationCardViewModel : ViewModelBase
     public MediaType Type => Item.Type;
     public string TypeDisplay => Type.ToString().ToUpperInvariant();
     public string? CoverImageUrl => Item.CoverImageUrl;
+    public string? CoverImagePath => Item.CoverImagePath;
     public string? Genres => Item.Genres;
     public string Reason => Recommendation.Reason;
     public double MatchScore => Recommendation.MatchScore;
@@ -38,30 +39,18 @@ public partial class RecommendationCardViewModel : ViewModelBase
 
     public void LoadCoverImage()
     {
-        if (CoverImage == null && !string.IsNullOrWhiteSpace(CoverImageUrl))
+        _ = LoadCoverImageAsync();
+    }
+
+    public async Task LoadCoverImageAsync()
+    {
+        if (CoverImage == null && (!string.IsNullOrWhiteSpace(CoverImagePath) || !string.IsNullOrWhiteSpace(CoverImageUrl)))
         {
-            _ = Task.Run(async () =>
+            var bmp = await ImageLoader.LoadCoverAsync(CoverImagePath, CoverImageUrl);
+            if (bmp != null)
             {
-                var bmp = await ImageLoader.LoadFromUrlAsync(CoverImageUrl);
-                if (bmp != null)
-                {
-                    try
-                    {
-                        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-                        {
-                            CoverImage = bmp;
-                        }
-                        else
-                        {
-                            Avalonia.Threading.Dispatcher.UIThread.Post(() => CoverImage = bmp);
-                        }
-                    }
-                    catch
-                    {
-                        CoverImage = bmp;
-                    }
-                }
-            });
+                CoverImage = bmp;
+            }
         }
     }
 }

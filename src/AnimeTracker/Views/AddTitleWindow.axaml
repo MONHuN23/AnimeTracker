@@ -53,7 +53,7 @@
             <TabItem Header="Search Catalog">
                 <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0,16,0,0">
                     <!-- Media Type Filter & Query Input -->
-                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="0,0,0,12">
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12">
                         <ComboBox Grid.Column="0"
                                   Width="130"
                                   Margin="0,0,10,0"
@@ -65,8 +65,19 @@
 
                         <TextBox Grid.Column="1"
                                  Text="{Binding SearchQuery, Mode=TwoWay}"
-                                 PlaceholderText="Type title to search (e.g. Frieren, Chainsaw Man)..."
+                                 PlaceholderText="Type title to search (e.g. One Piece, Solo Leveling, Chainsaw Man)..."
                                  FontSize="13" />
+
+                        <Button Grid.Column="2"
+                                Content="Search"
+                                Command="{Binding SearchNowCommand}"
+                                Margin="10,0,0,0"
+                                Background="{StaticResource AppAccentBrush}"
+                                Foreground="White"
+                                FontWeight="SemiBold"
+                                CornerRadius="6"
+                                Padding="14,6"
+                                VerticalAlignment="Stretch" />
                     </Grid>
 
                     <!-- Status / Notification Banners -->
@@ -186,10 +197,56 @@
                             <TextBlock Text="Total Episodes / Chapters (Optional)" FontWeight="SemiBold" FontSize="13" />
                             <NumericUpDown Value="{Binding ManualTotalProgress, Mode=TwoWay}"
                                            Minimum="0"
-                                           Maximum="10000"
+                                           Maximum="100000"
                                            FormatString="0"
                                            Width="200"
                                            HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <!-- Starting Progress -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Starting Progress (Watched / Read)" FontWeight="SemiBold" FontSize="13" />
+                            <NumericUpDown Value="{Binding ManualCurrentProgress, Mode=TwoWay}"
+                                           Minimum="0"
+                                           Maximum="100000"
+                                           FormatString="0"
+                                           Width="200"
+                                           HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <!-- Cover Image -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Cover Image (Optional - PNG, JPEG, WebP under 10MB)" FontWeight="SemiBold" FontSize="13" />
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto">
+                                <Border Grid.Column="0"
+                                        Width="80" Height="110"
+                                        CornerRadius="6"
+                                        ClipToBounds="True"
+                                        Background="{StaticResource AppBorderBrush}"
+                                        Margin="0,0,16,6"
+                                        IsVisible="{Binding HasManualCover}">
+                                    <Image Source="{Binding ManualCoverPreview}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button Content="Choose Image..."
+                                                Command="{Binding ChooseImageCommand}"
+                                                CornerRadius="6"
+                                                Padding="12,6" />
+                                        <Button Content="Remove"
+                                                Command="{Binding RemoveImageCommand}"
+                                                CornerRadius="6"
+                                                Padding="12,6"
+                                                IsVisible="{Binding HasManualCover}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding ManualCoverFilePath}"
+                                               FontSize="11"
+                                               Foreground="{StaticResource AppTextSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxWidth="400"
+                                               IsVisible="{Binding HasManualCover}" />
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
 
                         <!-- Genres -->

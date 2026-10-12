@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AnimeTracker.Data;
 using AnimeTracker.Models;
+using AnimeTracker.Services;
 using AnimeTracker.Services.Jikan;
 using AnimeTracker.ViewModels;
 using Microsoft.Data.Sqlite;
@@ -40,6 +41,18 @@ public class AddTitleViewModelTests : IDisposable
             {
                 Content = new StringContent("{\"data\":[]}")
             });
+        }
+    }
+
+    static AddTitleViewModelTests()
+    {
+        try
+        {
+            Program.BuildAvaloniaApp().SetupWithoutStarting();
+        }
+        catch
+        {
+            // Already initialized
         }
     }
 
@@ -332,5 +345,163 @@ public class AddTitleViewModelTests : IDisposable
 
         var all = await _repository.GetAllAsync();
         Assert.Equal(2, all.Count);
+    }
+
+    [Fact]
+    public async Task AddManualTitleAsync_WithPositiveStartingProgress_SetsWatchingForAnime()
+    {
+        var client = CreateTestJikanClient("{\"data\":[]}");
+        var vm = new AddTitleViewModel(_repository, client);
+        vm.ManualTitle = "Custom Anime";
+        vm.ManualMediaType = MediaType.Anime;
+        vm.ManualCurrentProgress = 5;
+        vm.ManualTotalProgress = 12;
+
+        var added = await vm.AddManualTitleAsync();
+
+        Assert.True(added);
+        var all = await _repository.GetAllAsync();
+        Assert.Single(all);
+        Assert.Equal(MediaStatus.Watching, all[0].Status);
+        Assert.Equal(5, all[0].CurrentProgress);
+    }
+
+    [Fact]
+    public async Task AddManualTitleAsync_WithPositiveStartingProgress_SetsReadingForManga()
+    {
+        var client = CreateTestJikanClient("{\"data\":[]}");
+        var vm = new AddTitleViewModel(_repository, client);
+        vm.ManualTitle = "Custom Manga";
+        vm.ManualMediaType = MediaType.Manga;
+        vm.ManualCurrentProgress = 25;
+        vm.ManualTotalProgress = 100;
+
+        var added = await vm.AddManualTitleAsync();
+
+        Assert.True(added);
+        var all = await _repository.GetAllAsync();
+        Assert.Single(all);
+        Assert.Equal(MediaStatus.Reading, all[0].Status);
+        Assert.Equal(25, all[0].CurrentProgress);
+    }
+
+    [Fact]
+    public async Task AddManualTitleAsync_WithNegativeStartingProgress_SetsError()
+    {
+        var client = CreateTestJikanClient("{\"data\":[]}");
+        var vm = new AddTitleViewModel(_repository, client);
+        vm.ManualTitle = "Negative Progress Title";
+        vm.ManualCurrentProgress = -2;
+
+        var added = await vm.AddManualTitleAsync();
+
+        Assert.False(added);
+        Assert.NotNull(vm.ManualErrorMessage);
+        Assert.Contains("negative", vm.ManualErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AddManualTitleAsync_WithStartingProgressExceedingTotal_SetsError()
+    {
+        var client = CreateTestJikanClient("{\"data\":[]}");
+        var vm = new AddTitleViewModel(_repository, client);
+        vm.ManualTitle = "Exceeding Progress Title";
+        vm.ManualCurrentProgress = 15;
+        vm.ManualTotalProgress = 12;
+
+        var added = await vm.AddManualTitleAsync();
+
+        Assert.False(added);
+        Assert.NotNull(vm.ManualErrorMessage);
+        Assert.Contains("exceed", vm.ManualErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AddManualTitleAsync_WithValidImage_SavesCoverAndSetsCoverImagePath()
+    {
+        var coversDir = Path.Combine(Path.GetTempPath(), $"animetracker_covers_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(coversDir);
+        var storage = new CoverStorageService(coversDir);
+
+        var tempImageFile = Path.Combine(Path.GetTempPath(), $"temp_cover_{Guid.NewGuid():N}.png");
+        byte[] validPng =
+        [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+            0x42, 0x60, 0x82
+        ];
+        await File.WriteAllBytesAsync(tempImageFile, validPng);
+
+        try
+        {
+            var client = CreateTestJikanClient("{\"data\":[]}");
+            var vm = new AddTitleViewModel(_repository, client, storage);
+            vm.ManualTitle = "Custom Cover Title";
+            vm.SetSelectedCoverFile(tempImageFile);
+
+            Assert.NotNull(vm.ManualCoverPreview);
+            Assert.True(vm.HasManualCover);
+
+            var added = await vm.AddManualTitleAsync();
+            Assert.True(added);
+
+            var all = await _repository.GetAllAsync();
+            Assert.Single(all);
+            Assert.NotNull(all[0].CoverImagePath);
+            Assert.StartsWith("covers/", all[0].CoverImagePath!);
+
+            var fullPath = storage.GetFullPath(all[0].CoverImagePath!);
+            Assert.True(File.Exists(fullPath));
+        }
+        finally
+        {
+            if (File.Exists(tempImageFile)) File.Delete(tempImageFile);
+            if (Directory.Exists(coversDir)) Directory.Delete(coversDir, true);
+        }
+    }
+
+    [Fact]
+    public void RemoveImage_ClearsSelectedImageAndPreview()
+    {
+        var tempImageFile = Path.Combine(Path.GetTempPath(), $"temp_cover_{Guid.NewGuid():N}.png");
+        byte[] validPng =
+        [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+            0x42, 0x60, 0x82
+        ];
+        File.WriteAllBytes(tempImageFile, validPng);
+
+        try
+        {
+            var client = CreateTestJikanClient("{\"data\":[]}");
+            var vm = new AddTitleViewModel(_repository, client);
+            vm.SetSelectedCoverFile(tempImageFile);
+
+            Assert.True(vm.HasManualCover);
+            Assert.NotNull(vm.ManualCoverPreview);
+
+            vm.RemoveImage();
+
+            Assert.False(vm.HasManualCover);
+            Assert.Null(vm.ManualCoverPreview);
+            Assert.Null(vm.ManualCoverFilePath);
+        }
+        finally
+        {
+            if (File.Exists(tempImageFile)) File.Delete(tempImageFile);
+        }
     }
 }
