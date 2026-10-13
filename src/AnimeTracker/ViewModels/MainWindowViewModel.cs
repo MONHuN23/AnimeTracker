@@ -129,6 +129,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private CancellationTokenSource? _recommendationsCts;
     private CancellationTokenSource? _catalogSearchCts;
     private CancellationTokenSource? _successMessageCts;
+    private int _recommendationsRequestId = 0;
+    private int _catalogSearchRequestId = 0;
+    private bool _isChangingDiscoveryPill = false;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsDiscoveryRecommendationsTab))]
@@ -276,18 +279,16 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnSelectedMediaTypeFilterChanged(MediaTypeFilter value)
     {
         ApplyFilter();
-        if (IsRecommendationsSection)
+        if (IsRecommendationsSection && !_isChangingDiscoveryPill)
         {
-            LoadRecommendations();
             _ = LoadRecommendationsAsync();
         }
     }
     partial void OnSelectedSortOrderChanged(MediaSortOrder value) => ApplyFilter();
     partial void OnSelectedRecommendationGenreChanged(string? value)
     {
-        if (IsRecommendationsSection)
+        if (IsRecommendationsSection && !_isChangingDiscoveryPill)
         {
-            LoadRecommendations();
             _ = LoadRecommendationsAsync();
         }
     }
@@ -405,7 +406,6 @@ public partial class MainWindowViewModel : ViewModelBase
         ApplyFilter();
         if (IsRecommendationsSection)
         {
-            LoadRecommendations();
             _ = LoadRecommendationsAsync();
         }
     }
@@ -459,14 +459,24 @@ public partial class MainWindowViewModel : ViewModelBase
         UpdateRecommendationVisibilityStates();
     }
 
-    public async Task LoadRecommendationsAsync(bool forceRefresh = false)
+    public async Task LoadRecommendationsAsync(bool forceRefresh = false, bool clearResults = false)
     {
         if (SelectedSection != NavigationSection.Recommendations) return;
+
+        var requestId = ++_recommendationsRequestId;
+        var targetPill = SelectedDiscoveryPill;
+        var targetMediaType = SelectedMediaTypeFilter;
 
         _recommendationsCts?.Cancel();
         _recommendationsCts?.Dispose();
         _recommendationsCts = new CancellationTokenSource();
         var token = _recommendationsCts.Token;
+
+        if (clearResults)
+        {
+            Recommendations.Clear();
+            HasRecommendations = false;
+        }
 
         IsLoadingRecommendations = true;
         HasRecommendationError = false;
@@ -485,23 +495,26 @@ public partial class MainWindowViewModel : ViewModelBase
         try
         {
             RecommendationResult result;
-            if (SelectedDiscoveryPill == DiscoveryPill.Popular)
+            if (targetPill == DiscoveryPill.Popular)
             {
                 result = await RecommendationService.GetPopularRecommendationsAsync(
                     _allItems,
-                    SelectedMediaTypeFilter,
+                    targetMediaType,
                     token);
             }
             else
             {
                 result = await RecommendationService.GetExternalRecommendationsAsync(
                     _allItems,
-                    SelectedMediaTypeFilter,
+                    targetMediaType,
                     genreFilter,
                     token);
             }
 
-            if (token.IsCancellationRequested) return;
+            if (token.IsCancellationRequested || requestId != _recommendationsRequestId || SelectedDiscoveryPill != targetPill)
+            {
+                return;
+            }
 
             Recommendations.Clear();
             foreach (var rec in result.Recommendations)
@@ -544,13 +557,16 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            HasRecommendationError = true;
-            RecommendationErrorMessage = $"Error loading recommendations: {ex.Message}";
-            HasRecommendations = false;
+            if (requestId == _recommendationsRequestId && !token.IsCancellationRequested)
+            {
+                HasRecommendationError = true;
+                RecommendationErrorMessage = $"Error loading recommendations: {ex.Message}";
+                HasRecommendations = false;
+            }
         }
         finally
         {
-            if (!token.IsCancellationRequested)
+            if (!token.IsCancellationRequested && requestId == _recommendationsRequestId)
             {
                 IsLoadingRecommendations = false;
                 UpdateRecommendationVisibilityStates();
@@ -635,28 +651,41 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         SelectedDiscoveryPill = pill;
 
-        switch (pill)
+        // Category switch: Immediately clear previous/intermediate results and show loading indicator
+        Recommendations.Clear();
+        HasRecommendations = false;
+        IsLoadingRecommendations = true;
+        HasRecommendationError = false;
+        RecommendationErrorMessage = null;
+        UpdateRecommendationVisibilityStates();
+
+        _isChangingDiscoveryPill = true;
+        try
         {
-            case DiscoveryPill.ForYou:
-                SelectedMediaTypeFilter = MediaTypeFilter.All;
-                CatalogSearchMediaType = MediaType.Anime;
-                break;
-            case DiscoveryPill.Popular:
-                SelectedMediaTypeFilter = MediaTypeFilter.All;
-                CatalogSearchMediaType = MediaType.Anime;
-                break;
-            case DiscoveryPill.Anime:
-                SelectedMediaTypeFilter = MediaTypeFilter.Anime;
-                CatalogSearchMediaType = MediaType.Anime;
-                break;
-            case DiscoveryPill.Manga:
-                SelectedMediaTypeFilter = MediaTypeFilter.Manga;
-                CatalogSearchMediaType = MediaType.Manga;
-                break;
-            case DiscoveryPill.Manhwa:
-                SelectedMediaTypeFilter = MediaTypeFilter.Manhwa;
-                CatalogSearchMediaType = MediaType.Manhwa;
-                break;
+            switch (pill)
+            {
+                case DiscoveryPill.ForYou:
+                case DiscoveryPill.Popular:
+                    SelectedMediaTypeFilter = MediaTypeFilter.All;
+                    CatalogSearchMediaType = MediaType.Anime;
+                    break;
+                case DiscoveryPill.Anime:
+                    SelectedMediaTypeFilter = MediaTypeFilter.Anime;
+                    CatalogSearchMediaType = MediaType.Anime;
+                    break;
+                case DiscoveryPill.Manga:
+                    SelectedMediaTypeFilter = MediaTypeFilter.Manga;
+                    CatalogSearchMediaType = MediaType.Manga;
+                    break;
+                case DiscoveryPill.Manhwa:
+                    SelectedMediaTypeFilter = MediaTypeFilter.Manhwa;
+                    CatalogSearchMediaType = MediaType.Manhwa;
+                    break;
+            }
+        }
+        finally
+        {
+            _isChangingDiscoveryPill = false;
         }
 
         if (IsShowingSearchResults)
@@ -665,7 +694,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         else
         {
-            await RefreshRecommendationsAsync();
+            await LoadRecommendationsAsync(forceRefresh: false);
         }
     }
 
@@ -693,6 +722,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public async Task PerformCatalogSearchAsync(string? query, CancellationToken cancellationToken = default)
     {
+        var requestId = ++_catalogSearchRequestId;
         CatalogSearchErrorMessage = null;
         HasCatalogSearchError = false;
 
@@ -705,6 +735,8 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        CatalogSearchResults.Clear();
+        HasCatalogSearchResults = false;
         IsLoadingCatalogSearch = true;
         ShowEmptyCatalogSearchState = false;
 
@@ -715,6 +747,11 @@ public partial class MainWindowViewModel : ViewModelBase
                 : (CatalogSearchMediaType == MediaType.Manhwa
                     ? await JikanClient.SearchAsync("manhwa", query, cancellationToken)
                     : await JikanClient.SearchMangaAsync(query, cancellationToken));
+
+            if (cancellationToken.IsCancellationRequested || requestId != _catalogSearchRequestId)
+            {
+                return;
+            }
 
             CatalogSearchResults.Clear();
 
@@ -746,21 +783,27 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         catch (JikanApiException ex) when (ex.IsRateLimited)
         {
-            CatalogSearchResults.Clear();
-            HasCatalogSearchResults = false;
-            HasCatalogSearchError = true;
-            CatalogSearchErrorMessage = "Jikan API rate limit reached (HTTP 429). Please wait a moment before searching again.";
+            if (requestId == _catalogSearchRequestId && !cancellationToken.IsCancellationRequested)
+            {
+                CatalogSearchResults.Clear();
+                HasCatalogSearchResults = false;
+                HasCatalogSearchError = true;
+                CatalogSearchErrorMessage = "Jikan API rate limit reached (HTTP 429). Please wait a moment before searching again.";
+            }
         }
         catch (Exception ex)
         {
-            CatalogSearchResults.Clear();
-            HasCatalogSearchResults = false;
-            HasCatalogSearchError = true;
-            CatalogSearchErrorMessage = $"Error searching catalog: {ex.Message}";
+            if (requestId == _catalogSearchRequestId && !cancellationToken.IsCancellationRequested)
+            {
+                CatalogSearchResults.Clear();
+                HasCatalogSearchResults = false;
+                HasCatalogSearchError = true;
+                CatalogSearchErrorMessage = $"Error searching catalog: {ex.Message}";
+            }
         }
         finally
         {
-            if (!cancellationToken.IsCancellationRequested)
+            if (!cancellationToken.IsCancellationRequested && requestId == _catalogSearchRequestId)
             {
                 IsLoadingCatalogSearch = false;
             }

@@ -39,7 +39,7 @@ AnimeTracker/
 │   │   └── Jikan/                  # Jikan v4 REST API hívások, hibakezelés és DTO leképezés
 │   ├── ViewModels/                 # MVVM ViewModel réteg (állapotok, parancsok, szűrések)
 │   └── Views/                      # Avalonia XAML nézetek, ablakok és stílusok
-└── tests/AnimeTracker.Tests/       # Automatizált xUnit tesztek (202 egység- és integrációs teszt)
+└── tests/AnimeTracker.Tests/       # Automatizált xUnit tesztek (205 egység- és integrációs teszt)
 ```
 
 ### 1.4. Parancsok (Futtatás, Tesztelés, Build)

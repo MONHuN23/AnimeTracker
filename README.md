@@ -3,7 +3,7 @@
 [![.NET 10](https://img.shields.io/badge/.NET-10.0%20LTS-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Avalonia UI](https://img.shields.io/badge/Avalonia%20UI-12.x-8430b5?logo=avalonia&logoColor=white)](https://avaloniaui.net/)
 [![SQLite](https://img.shields.io/badge/Database-SQLite%20%2B%20Dapper-003B57?logo=sqlite&logoColor=white)](https://sqlite.org/)
-[![Tests](https://img.shields.io/badge/Tests-202%20Passing-brightgreen)](https://xunit.net/)
+[![Tests](https://img.shields.io/badge/Tests-205%20Passing-brightgreen)](https://xunit.net/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **AnimeTracker** is a modern, lightweight, privacy-focused cross-platform desktop application designed to track your anime, manga, and manhwa progress. Built with **.NET 10 LTS** and **Avalonia UI 12**, it combines a clean graphite-purple dark theme with local-first SQLite storage, online metadata searching, and a modern Discovery Hub with personalized recommendations.
@@ -70,7 +70,7 @@
 - **MVVM Toolkit:** `CommunityToolkit.Mvvm` (Source generators, ObservableProperty, RelayCommand)
 - **Data Access:** Local SQLite via `Microsoft.Data.Sqlite` + [Dapper](https://github.com/DapperLib/Dapper) micro-ORM (Strictly no heavy EF Core)
 - **External API:** Jikan API v4 via `System.Net.Http.HttpClient` & `System.Text.Json` with Kitsu fallback
-- **Testing:** [xUnit](https://xunit.net/) with 202 automated unit and integration tests (TDD workflow)
+- **Testing:** [xUnit](https://xunit.net/) with 205 automated unit and integration tests (TDD workflow)
 
 ### Architectural Design
 
@@ -88,7 +88,7 @@ AnimeTracker/
 │   │   └── RecommendationService.cs # Affinity scoring & backlog recommendation engine
 │   ├── ViewModels/            # MVVM ViewModels (MainWindow, Detail, AddTitle, Cards)
 │   └── Views/                 # Avalonia XAML Windows, Dialogs, Themes & Styles
-└── tests/AnimeTracker.Tests/  # Comprehensive xUnit test suite (202 tests)
+└── tests/AnimeTracker.Tests/  # Comprehensive xUnit test suite (205 tests)
 ```
 
 ---

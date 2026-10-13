@@ -545,21 +545,212 @@ public class MainWindowViewModelTests : IDisposable
         Assert.Contains("already in your library", vm.RecommendationSuccessMessage);
     }
 
+    [Fact]
+    public async Task SelectDiscoveryPillAsync_ClearsPreviousResults_AndDoesNotPopulateBacklogLibraryItems()
+    {
+        // Add item to library
+        await _repository.AddAsync(new MediaItem
+        {
+            MalId = 10,
+            MalType = "anime",
+            Title = "Library Backlog Item",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Completed,
+            Score = 10,
+            Genres = "Action"
+        });
+
+        var popularJson = """
+        {
+            "data": [
+                {
+                    "mal_id": 999,
+                    "title": "Popular Show",
+                    "score": 9.0,
+                    "genres": [ { "name": "Action" } ]
+                }
+            ]
+        }
+        """;
+
+        var handler = new TestHttpMessageHandler
+        {
+            ResponseFactory = _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(popularJson) }
+        };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var jikanClient = new JikanApiClient(httpClient);
+        var recService = new RecommendationService(jikanClient);
+        var vm = new MainWindowViewModel(_repository, jikanClient, recommendationService: recService);
+
+        await vm.LoadLibraryAsync();
+        vm.SelectSectionCommand.Execute(NavigationSection.Recommendations);
+
+        // Simulate pre-existing items in Recommendations from a previous tab
+        vm.Recommendations.Clear();
+        var previousRec = new RecommendationCardViewModel(new RecommendationItem(
+            new MediaItem { Title = "Old Previous Title", MalId = 888, MalType = "anime" },
+            10.0,
+            new[] { "Action" },
+            "Old reason",
+            null));
+        vm.Recommendations.Add(previousRec);
+        Assert.Single(vm.Recommendations);
+
+        // Switch to Popular pill
+        await vm.SelectDiscoveryPillCommand.ExecuteAsync(DiscoveryPill.Popular);
+
+        // Verify that Recommendations only has the popular result, NOT the backlog item from library, and NOT the previous item
+        Assert.NotEmpty(vm.Recommendations);
+        Assert.Contains(vm.Recommendations, r => r.Title == "Popular Show");
+        Assert.DoesNotContain(vm.Recommendations, r => r.Title == "Library Backlog Item");
+        Assert.DoesNotContain(vm.Recommendations, r => r.Title == "Old Previous Title");
+    }
+
+    [Fact]
+    public async Task OlderApiRequest_DoesNotOverwrite_NewerCategoryResults()
+    {
+        var slowTcs = new TaskCompletionSource<HttpResponseMessage>();
+
+        var slowJson = """
+        {
+            "data": [
+                {
+                    "mal_id": 111,
+                    "title": "Slow Old Result",
+                    "score": 8.0,
+                    "genres": [ { "name": "Action" } ]
+                }
+            ]
+        }
+        """;
+
+        var fastPopularJson = """
+        {
+            "data": [
+                {
+                    "mal_id": 222,
+                    "title": "Fast Popular Result",
+                    "score": 9.2,
+                    "genres": [ { "name": "Action" } ]
+                }
+            ]
+        }
+        """;
+
+        var handler = new TestHttpMessageHandler
+        {
+            AsyncResponseFactory = async req =>
+            {
+                var url = req.RequestUri?.ToString() ?? "";
+                if (url.Contains("order_by=popularity"))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fastPopularJson) };
+                }
+                // Slower initial request
+                return await slowTcs.Task;
+            }
+        };
+
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var jikanClient = new JikanApiClient(httpClient);
+        var recService = new RecommendationService(jikanClient);
+        var vm = new MainWindowViewModel(_repository, jikanClient, recommendationService: recService);
+
+        await _repository.AddAsync(new MediaItem
+        {
+            Title = "My Favorite",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Completed,
+            Score = 10,
+            Genres = "Action"
+        });
+
+        await vm.LoadLibraryAsync();
+        vm.SelectSectionCommand.Execute(NavigationSection.Recommendations);
+
+        // Launch slow request for ForYou
+        var slowLoadTask = vm.LoadRecommendationsAsync();
+
+        // While slow request is in flight, switch to Popular
+        var popularTask = vm.SelectDiscoveryPillCommand.ExecuteAsync(DiscoveryPill.Popular);
+        await popularTask;
+
+        // Verify Popular result has arrived
+        Assert.Single(vm.Recommendations);
+        Assert.Equal("Fast Popular Result", vm.Recommendations[0].Title);
+
+        // Now resolve the slow request
+        slowTcs.SetResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(slowJson) });
+        await slowLoadTask;
+
+        // Verify that the slow request did NOT overwrite the newer category's results
+        Assert.Single(vm.Recommendations);
+        Assert.Equal("Fast Popular Result", vm.Recommendations[0].Title);
+        Assert.DoesNotContain(vm.Recommendations, r => r.Title == "Slow Old Result");
+    }
+
+    [Fact]
+    public async Task LoadRecommendationsAsync_TransitionsLoadingState_OnEmptyAndError()
+    {
+        var vm = new MainWindowViewModel(_repository);
+        vm.SelectSectionCommand.Execute(NavigationSection.Recommendations);
+
+        // When starting with no favorite titles rated 8+, it should finish empty
+        await vm.LoadRecommendationsAsync();
+        Assert.False(vm.IsLoadingRecommendations);
+        Assert.False(vm.HasRecommendations);
+        Assert.True(vm.ShowEmptyRecommendationState);
+        Assert.False(vm.HasRecommendationError);
+
+        // Now simulate error
+        var handler = new TestHttpMessageHandler
+        {
+            ResponseFactory = _ => new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var jikanClient = new JikanApiClient(httpClient);
+        var recService = new RecommendationService(jikanClient);
+        var errorVm = new MainWindowViewModel(_repository, jikanClient, recommendationService: recService);
+
+        await _repository.AddAsync(new MediaItem
+        {
+            Title = "Top Rated",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Completed,
+            Score = 10,
+            Genres = "Action"
+        });
+        await errorVm.LoadLibraryAsync();
+        errorVm.SelectSectionCommand.Execute(NavigationSection.Recommendations);
+
+        await errorVm.LoadRecommendationsAsync();
+        Assert.False(errorVm.IsLoadingRecommendations);
+        Assert.False(errorVm.HasRecommendations);
+        Assert.True(errorVm.HasRecommendationError);
+        Assert.NotNull(errorVm.RecommendationErrorMessage);
+        Assert.False(errorVm.ShowEmptyRecommendationState);
+    }
+
     private class TestHttpMessageHandler : HttpMessageHandler
     {
         public Func<HttpRequestMessage, HttpResponseMessage>? ResponseFactory { get; set; }
+        public Func<HttpRequestMessage, Task<HttpResponseMessage>>? AsyncResponseFactory { get; set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (AsyncResponseFactory != null)
+            {
+                return await AsyncResponseFactory(request);
+            }
             if (ResponseFactory != null)
             {
-                return Task.FromResult(ResponseFactory(request));
+                return ResponseFactory(request);
             }
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("{\"data\":[]}")
-            });
+            };
         }
     }
 }
