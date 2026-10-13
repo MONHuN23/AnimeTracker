@@ -14,9 +14,61 @@ public class JikanApiClient
     private readonly HttpClient _kitsuClient;
     private readonly bool _isCustomClient;
     private bool _jikanOffline;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTime Timestamp, IReadOnlyList<JikanSearchResult> Items)> _genreCache = new();
+
+    public TimeSpan CacheDuration { get; set; } = TimeSpan.FromMinutes(10);
+
+    public static readonly IReadOnlyDictionary<string, int> JikanGenreIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Action"] = 1,
+        ["Adventure"] = 2,
+        ["Cars"] = 3,
+        ["Comedy"] = 4,
+        ["Avante Garde"] = 5,
+        ["Demons"] = 6,
+        ["Mystery"] = 7,
+        ["Drama"] = 8,
+        ["Ecchi"] = 9,
+        ["Fantasy"] = 10,
+        ["Game"] = 11,
+        ["Hentai"] = 12,
+        ["Historical"] = 13,
+        ["Horror"] = 14,
+        ["Kids"] = 15,
+        ["Martial Arts"] = 17,
+        ["Mecha"] = 18,
+        ["Music"] = 19,
+        ["Parody"] = 20,
+        ["Samurai"] = 21,
+        ["Romance"] = 22,
+        ["School"] = 23,
+        ["Sci-Fi"] = 24,
+        ["Shoujo"] = 25,
+        ["Girls Love"] = 26,
+        ["Shounen"] = 27,
+        ["Boys Love"] = 28,
+        ["Space"] = 29,
+        ["Sports"] = 30,
+        ["Super Power"] = 31,
+        ["Vampire"] = 32,
+        ["Harem"] = 35,
+        ["Slice of Life"] = 36,
+        ["Supernatural"] = 37,
+        ["Military"] = 38,
+        ["Police"] = 39,
+        ["Psychological"] = 40,
+        ["Suspense"] = 41,
+        ["Seinen"] = 42,
+        ["Josei"] = 43,
+        ["Award Winning"] = 46,
+        ["Gourmet"] = 47,
+        ["Work Life"] = 48
+    };
 
     public const string DefaultBaseUrl = "https://api.jikan.moe/v4/";
     public const string DefaultKitsuBaseUrl = "https://kitsu.io/api/edge/";
+
+    public void ClearCache() => _genreCache.Clear();
 
     public JikanApiClient(HttpClient? httpClient = null, HttpClient? kitsuClient = null)
     {
@@ -202,6 +254,215 @@ public class JikanApiClient
                 }
 
                 return results;
+            }
+            catch (JsonException ex)
+            {
+                throw new JikanApiException($"Failed to parse catalog API response JSON: {ex.Message}", response.StatusCode, ex);
+            }
+        }
+    }
+
+    public async Task<IReadOnlyList<JikanSearchResult>> GetRecommendationsByGenreAsync(
+        string malType,
+        string genre,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(genre))
+        {
+            return Array.Empty<JikanSearchResult>();
+        }
+
+        var normalizedType = malType?.Trim().ToLowerInvariant() switch
+        {
+            "manhwa" => "manhwa",
+            "anime" => "anime",
+            _ => "manga"
+        };
+        var cacheKey = $"{normalizedType}:{genre.Trim().ToLowerInvariant()}";
+
+        if (_genreCache.TryGetValue(cacheKey, out var cached) && (DateTime.UtcNow - cached.Timestamp) < CacheDuration)
+        {
+            return cached.Items;
+        }
+
+        IReadOnlyList<JikanSearchResult> results;
+
+        if (!_isCustomClient || _jikanOffline)
+        {
+            results = await GetKitsuRecommendationsByGenreAsync(normalizedType, genre.Trim(), cancellationToken);
+        }
+        else
+        {
+            results = await GetJikanRecommendationsByGenreAsync(normalizedType, genre.Trim(), cancellationToken);
+        }
+
+        _genreCache[cacheKey] = (DateTime.UtcNow, results);
+        return results;
+    }
+
+    private async Task<IReadOnlyList<JikanSearchResult>> GetJikanRecommendationsByGenreAsync(
+        string malType,
+        string genre,
+        CancellationToken cancellationToken)
+    {
+        malType = malType ?? "manga";
+        var isAnime = string.Equals(malType, "anime", StringComparison.OrdinalIgnoreCase);
+        var endpoint = isAnime ? "anime" : "manga";
+        var typeParam = malType.Trim().ToLowerInvariant() switch
+        {
+            "manhwa" => "&type=manhwa",
+            "manga" => "&type=manga",
+            _ => string.Empty
+        };
+
+        string relativeUrl;
+        if (JikanGenreIds.TryGetValue(genre, out var genreId))
+        {
+            relativeUrl = $"{endpoint}?genres={genreId}{typeParam}&order_by=score&sort=desc&limit=25";
+        }
+        else
+        {
+            relativeUrl = $"{endpoint}?q={Uri.EscapeDataString(genre)}{typeParam}&order_by=score&sort=desc&limit=25";
+        }
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync(relativeUrl, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _jikanOffline = true;
+            try
+            {
+                return await GetKitsuRecommendationsByGenreAsync(malType, genre, cancellationToken);
+            }
+            catch
+            {
+                throw new JikanApiException($"Network error while calling Jikan API ({malType}): {ex.Message}", innerException: ex);
+            }
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                throw new JikanApiException("Jikan API rate limit reached (HTTP 429).", HttpStatusCode.TooManyRequests);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new JikanApiException($"Jikan API returned error status: {response.StatusCode}", response.StatusCode);
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            try
+            {
+                using var doc = JsonDocument.Parse(content);
+                if (!doc.RootElement.TryGetProperty("data", out var dataElement) || dataElement.ValueKind != JsonValueKind.Array)
+                {
+                    return Array.Empty<JikanSearchResult>();
+                }
+
+                var list = new List<JikanSearchResult>();
+                foreach (var item in dataElement.EnumerateArray())
+                {
+                    list.Add(ParseJikanItem(item, malType));
+                }
+
+                return list;
+            }
+            catch (JsonException ex)
+            {
+                throw new JikanApiException($"Failed to parse Jikan API response JSON: {ex.Message}", response.StatusCode, ex);
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<JikanSearchResult>> GetKitsuRecommendationsByGenreAsync(
+        string malType,
+        string genre,
+        CancellationToken cancellationToken)
+    {
+        malType = malType ?? "manga";
+        var isAnime = string.Equals(malType, "anime", StringComparison.OrdinalIgnoreCase);
+        var endpoint = isAnime ? "anime" : "manga";
+        var subtypeFilter = malType.Trim().ToLowerInvariant() switch
+        {
+            "manhwa" => "&filter[subtype]=manhwa",
+            "manga" => "&filter[subtype]=manga",
+            _ => string.Empty
+        };
+        var relativeUrl = $"{endpoint}?filter[categories]={Uri.EscapeDataString(genre)}{subtypeFilter}&sort=-averageRating&page[limit]=20&include=categories";
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _kitsuClient.GetAsync(relativeUrl, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new JikanApiException($"Network error while calling catalog API ({malType}): {ex.Message}", innerException: ex);
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new JikanApiException($"Catalog API returned error status: {response.StatusCode}", response.StatusCode);
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            try
+            {
+                using var doc = JsonDocument.Parse(content);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("data", out var dataElement) || dataElement.ValueKind != JsonValueKind.Array)
+                {
+                    return Array.Empty<JikanSearchResult>();
+                }
+
+                var categoriesById = new Dictionary<string, string>();
+                if (root.TryGetProperty("included", out var includedElement) && includedElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var inc in includedElement.EnumerateArray())
+                    {
+                        if (inc.TryGetProperty("type", out var incType) && incType.GetString() == "categories" &&
+                            inc.TryGetProperty("id", out var incId) &&
+                            inc.TryGetProperty("attributes", out var incAttr) &&
+                            incAttr.TryGetProperty("title", out var incTitle))
+                        {
+                            var idStr = incId.GetString();
+                            var titleStr = incTitle.GetString();
+                            if (!string.IsNullOrEmpty(idStr) && !string.IsNullOrEmpty(titleStr))
+                            {
+                                categoriesById[idStr] = titleStr;
+                            }
+                        }
+                    }
+                }
+
+                var list = new List<JikanSearchResult>();
+                foreach (var item in dataElement.EnumerateArray())
+                {
+                    var parsed = ParseKitsuItem(item, malType, categoriesById);
+                    if (parsed != null)
+                    {
+                        list.Add(parsed);
+                    }
+                }
+
+                return list;
             }
             catch (JsonException ex)
             {

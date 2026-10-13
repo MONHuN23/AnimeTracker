@@ -22,9 +22,11 @@ public partial class MediaCardViewModel : ViewModelBase
     public int? Score { get; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TypeDisplay))]
     private MediaStatus _status;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressDisplay))]
     private int _currentProgress;
 
     [ObservableProperty]
@@ -33,7 +35,7 @@ public partial class MediaCardViewModel : ViewModelBase
     [ObservableProperty]
     private Bitmap? _coverImage;
 
-    public string TypeDisplay => Type.ToString().ToUpperInvariant();
+    public string TypeDisplay => $"{Type} · {Status}";
 
     public string ProgressDisplay =>
         Type == MediaType.Anime
@@ -88,7 +90,6 @@ public partial class MediaCardViewModel : ViewModelBase
         CurrentProgress = updated.CurrentProgress;
         Status = updated.Status;
         UpdatedAt = updated.UpdatedAt;
-        OnPropertyChanged(nameof(ProgressDisplay));
 
         if (_onCardUpdated != null)
         {
@@ -103,7 +104,6 @@ public partial class MediaCardViewModel : ViewModelBase
         CurrentProgress = updated.CurrentProgress;
         Status = updated.Status;
         UpdatedAt = updated.UpdatedAt;
-        OnPropertyChanged(nameof(ProgressDisplay));
 
         if (_onCardUpdated != null)
         {

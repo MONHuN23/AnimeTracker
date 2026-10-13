@@ -316,4 +316,90 @@ public class MediaTrackingServiceTests : IDisposable
         var fresh = await _repository.GetByIdAsync(id);
         Assert.Equal(5, fresh!.CurrentProgress);
     }
+
+    [Fact]
+    public async Task IncrementProgressAsync_WhenReachingKnownTotalProgress_AutomaticallyMarksCompleted()
+    {
+        var item = new MediaItem
+        {
+            Title = "Solo Leveling",
+            Type = MediaType.Manhwa,
+            Status = MediaStatus.Reading,
+            CurrentProgress = 199,
+            TotalProgress = 200
+        };
+        var id = await _repository.AddAsync(item);
+
+        var result = await _service.IncrementProgressAsync(id);
+
+        Assert.Equal(200, result.CurrentProgress);
+        Assert.Equal(MediaStatus.Completed, result.Status);
+
+        var fresh = await _repository.GetByIdAsync(id);
+        Assert.Equal(MediaStatus.Completed, fresh!.Status);
+        Assert.Equal(200, fresh.CurrentProgress);
+    }
+
+    [Fact]
+    public async Task IncrementProgressAsync_WhenTotalProgressIsNull_DoesNotMarkCompleted()
+    {
+        var item = new MediaItem
+        {
+            Title = "One Piece",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching,
+            CurrentProgress = 1000,
+            TotalProgress = null
+        };
+        var id = await _repository.AddAsync(item);
+
+        var result = await _service.IncrementProgressAsync(id);
+
+        Assert.Equal(1001, result.CurrentProgress);
+        Assert.Equal(MediaStatus.Watching, result.Status);
+    }
+
+    [Fact]
+    public async Task SetProgressAsync_WhenReachingKnownTotalProgress_AutomaticallyMarksCompleted()
+    {
+        var item = new MediaItem
+        {
+            Title = "Chainsaw Man",
+            Type = MediaType.Manga,
+            Status = MediaStatus.Reading,
+            CurrentProgress = 10,
+            TotalProgress = 97
+        };
+        var id = await _repository.AddAsync(item);
+
+        var result = await _service.SetProgressAsync(id, 97);
+
+        Assert.Equal(97, result.CurrentProgress);
+        Assert.Equal(MediaStatus.Completed, result.Status);
+
+        var fresh = await _repository.GetByIdAsync(id);
+        Assert.Equal(MediaStatus.Completed, fresh!.Status);
+    }
+
+    [Fact]
+    public async Task DecrementProgressAsync_WhenCompleted_DoesNotRevertStatus()
+    {
+        var item = new MediaItem
+        {
+            Title = "Finished Anime",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Completed,
+            CurrentProgress = 12,
+            TotalProgress = 12
+        };
+        var id = await _repository.AddAsync(item);
+
+        var result = await _service.DecrementProgressAsync(id);
+
+        Assert.Equal(11, result.CurrentProgress);
+        Assert.Equal(MediaStatus.Completed, result.Status);
+
+        var fresh = await _repository.GetByIdAsync(id);
+        Assert.Equal(MediaStatus.Completed, fresh!.Status);
+    }
 }

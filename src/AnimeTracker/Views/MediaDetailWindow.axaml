@@ -207,7 +207,6 @@
 
                             <Button Content="{Binding RewatchActionLabel}"
                                     Command="{Binding StartRewatchCommand}"
-                                    IsEnabled="{Binding CanRewatch}"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center"
                                     Background="{StaticResource AppAccentBrush}"

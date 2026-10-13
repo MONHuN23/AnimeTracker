@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using AnimeTracker.Data;
 using AnimeTracker.Models;
@@ -10,6 +11,7 @@ using AnimeTracker.Services.Backup;
 using AnimeTracker.Services.Jikan;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Data.Sqlite;
 
 namespace AnimeTracker.ViewModels;
 
@@ -38,6 +40,12 @@ public enum MediaSortOrder
     Title,
     Score,
     Progress
+}
+
+public enum DiscoveryTab
+{
+    Recommendations,
+    Search
 }
 
 public partial class MainWindowViewModel : ViewModelBase
@@ -89,10 +97,63 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _hasRecommendations;
 
     [ObservableProperty]
+    private bool _isLoadingRecommendations;
+
+    [ObservableProperty]
+    private string? _recommendationErrorMessage;
+
+    [ObservableProperty]
+    private bool _hasRecommendationError;
+
+    [ObservableProperty]
+    private bool _showEmptyRecommendationState;
+
+    [ObservableProperty]
+    private string? _recommendationSuccessMessage;
+
+    [ObservableProperty]
     private string? _recommendationEmptyMessage;
 
     [ObservableProperty]
     private string? _selectedRecommendationGenre = "All Genres";
+
+    private CancellationTokenSource? _recommendationsCts;
+    private CancellationTokenSource? _catalogSearchCts;
+    private CancellationTokenSource? _successMessageCts;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDiscoveryRecommendationsTab))]
+    [NotifyPropertyChangedFor(nameof(IsDiscoverySearchTab))]
+    private DiscoveryTab _selectedDiscoveryTab = DiscoveryTab.Recommendations;
+
+    public bool IsDiscoveryRecommendationsTab => SelectedDiscoveryTab == DiscoveryTab.Recommendations;
+    public bool IsDiscoverySearchTab => SelectedDiscoveryTab == DiscoveryTab.Search;
+
+    [ObservableProperty]
+    private string _catalogSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private MediaType _catalogSearchMediaType = MediaType.Anime;
+
+    [ObservableProperty]
+    private bool _isLoadingCatalogSearch;
+
+    [ObservableProperty]
+    private bool _hasCatalogSearchError;
+
+    [ObservableProperty]
+    private string? _catalogSearchErrorMessage;
+
+    [ObservableProperty]
+    private bool _hasCatalogSearchResults;
+
+    [ObservableProperty]
+    private bool _showEmptyCatalogSearchState;
+
+    [ObservableProperty]
+    private string? _catalogSearchEmptyMessage;
+
+    public ObservableCollection<CatalogSearchCardViewModel> CatalogSearchResults { get; } = new();
 
     [ObservableProperty]
     private int _activeCount = 0;
@@ -138,7 +199,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Repository = repository ?? new MediaItemRepository();
         JikanClient = jikanClient ?? new JikanApiClient();
         TrackingService = trackingService ?? new MediaTrackingService(Repository);
-        RecommendationService = recommendationService ?? new RecommendationService();
+        RecommendationService = recommendationService ?? new RecommendationService(JikanClient);
         BackupService = backupService ?? new BackupService(Repository.ConnectionString);
     }
 
@@ -149,10 +210,37 @@ public partial class MainWindowViewModel : ViewModelBase
         if (IsRecommendationsSection)
         {
             LoadRecommendations();
+            _ = LoadRecommendationsAsync();
         }
     }
     partial void OnSelectedSortOrderChanged(MediaSortOrder value) => ApplyFilter();
-    partial void OnSelectedRecommendationGenreChanged(string? value) => LoadRecommendations();
+    partial void OnSelectedRecommendationGenreChanged(string? value)
+    {
+        if (IsRecommendationsSection)
+        {
+            LoadRecommendations();
+            _ = LoadRecommendationsAsync();
+        }
+    }
+
+    partial void OnCatalogSearchQueryChanged(string value)
+    {
+        _catalogSearchCts?.Cancel();
+        _catalogSearchCts?.Dispose();
+        _catalogSearchCts = new CancellationTokenSource();
+        _ = TriggerCatalogSearchDebounceAsync(value, _catalogSearchCts.Token);
+    }
+
+    partial void OnCatalogSearchMediaTypeChanged(MediaType value)
+    {
+        if (!string.IsNullOrWhiteSpace(CatalogSearchQuery))
+        {
+            _catalogSearchCts?.Cancel();
+            _catalogSearchCts?.Dispose();
+            _catalogSearchCts = new CancellationTokenSource();
+            _ = PerformCatalogSearchAsync(CatalogSearchQuery, _catalogSearchCts.Token);
+        }
+    }
 
     [RelayCommand]
     public void SelectSection(NavigationSection section)
@@ -176,6 +264,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (IsRecommendationsSection)
         {
             LoadRecommendations();
+            _ = LoadRecommendationsAsync();
         }
     }
 
@@ -221,10 +310,13 @@ public partial class MainWindowViewModel : ViewModelBase
     public async Task OpenRecommendationDetailAsync(RecommendationCardViewModel? card)
     {
         if (card == null) return;
-        var item = await Repository.GetByIdAsync(card.Id);
-        if (item != null && OpenDetailRequested != null)
+        if (card.Id > 0)
         {
-            await OpenDetailRequested.Invoke(item);
+            var item = await Repository.GetByIdAsync(card.Id);
+            if (item != null && OpenDetailRequested != null)
+            {
+                await OpenDetailRequested.Invoke(item);
+            }
         }
     }
 
@@ -240,7 +332,14 @@ public partial class MainWindowViewModel : ViewModelBase
         if (IsRecommendationsSection)
         {
             LoadRecommendations();
+            _ = LoadRecommendationsAsync();
         }
+    }
+
+    [RelayCommand]
+    public async Task RefreshRecommendationsAsync()
+    {
+        await LoadRecommendationsAsync(forceRefresh: true);
     }
 
     public void LoadRecommendations()
@@ -283,6 +382,340 @@ public partial class MainWindowViewModel : ViewModelBase
 
         HasRecommendations = result.HasRecommendations;
         RecommendationEmptyMessage = result.EmptyStateMessage;
+        UpdateRecommendationVisibilityStates();
+    }
+
+    public async Task LoadRecommendationsAsync(bool forceRefresh = false)
+    {
+        if (SelectedSection != NavigationSection.Recommendations) return;
+
+        _recommendationsCts?.Cancel();
+        _recommendationsCts?.Dispose();
+        _recommendationsCts = new CancellationTokenSource();
+        var token = _recommendationsCts.Token;
+
+        IsLoadingRecommendations = true;
+        HasRecommendationError = false;
+        RecommendationErrorMessage = null;
+        UpdateRecommendationVisibilityStates();
+
+        if (forceRefresh)
+        {
+            JikanClient.ClearCache();
+        }
+
+        var genreFilter = string.Equals(SelectedRecommendationGenre, "All Genres", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : SelectedRecommendationGenre;
+
+        try
+        {
+            var result = await RecommendationService.GetExternalRecommendationsAsync(
+                _allItems,
+                SelectedMediaTypeFilter,
+                genreFilter,
+                token);
+
+            if (token.IsCancellationRequested) return;
+
+            Recommendations.Clear();
+            foreach (var rec in result.Recommendations)
+            {
+                var card = new RecommendationCardViewModel(rec);
+                card.LoadCoverImage();
+                Recommendations.Add(card);
+            }
+
+            var currentSelected = SelectedRecommendationGenre ?? "All Genres";
+            TopFavoriteGenres.Clear();
+            TopFavoriteGenres.Add("All Genres");
+            foreach (var g in result.TopFavoriteGenres)
+            {
+                TopFavoriteGenres.Add(g);
+            }
+
+            if (TopFavoriteGenres.Contains(currentSelected))
+            {
+                SelectedRecommendationGenre = currentSelected;
+            }
+            else
+            {
+                SelectedRecommendationGenre = "All Genres";
+            }
+
+            HasRecommendations = result.HasRecommendations;
+            RecommendationEmptyMessage = result.EmptyStateMessage;
+
+            if (result.HasError)
+            {
+                HasRecommendationError = true;
+                RecommendationErrorMessage = result.ErrorMessage;
+                HasRecommendations = false;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Canceled by newer load request
+        }
+        catch (Exception ex)
+        {
+            HasRecommendationError = true;
+            RecommendationErrorMessage = $"Error loading recommendations: {ex.Message}";
+            HasRecommendations = false;
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                IsLoadingRecommendations = false;
+                UpdateRecommendationVisibilityStates();
+            }
+        }
+    }
+
+    private void UpdateRecommendationVisibilityStates()
+    {
+        ShowEmptyRecommendationState = !IsLoadingRecommendations && !HasRecommendationError && !HasRecommendations;
+    }
+
+    [RelayCommand]
+    public async Task AddRecommendationToLibraryAsync(RecommendationCardViewModel? card)
+    {
+        if (card == null) return;
+        var item = card.Recommendation.Item;
+
+        // 1. Duplicate check via MalId and MalType if available
+        if (item.MalId.HasValue && !string.IsNullOrWhiteSpace(item.MalType))
+        {
+            var existing = await Repository.GetByMalIdAsync(item.MalId.Value, item.MalType);
+            if (existing != null)
+            {
+                Recommendations.Remove(card);
+                HasRecommendations = Recommendations.Count > 0;
+                UpdateRecommendationVisibilityStates();
+                ShowRecommendationSuccess($"'{item.Title}' is already in your library.");
+                return;
+            }
+        }
+
+        var initialStatus = item.Type == MediaType.Anime ? MediaStatus.PlanToWatch : MediaStatus.PlanToRead;
+        var newItem = new MediaItem
+        {
+            MalId = item.MalId,
+            MalType = item.MalType,
+            Title = item.Title,
+            Type = item.Type,
+            Status = initialStatus,
+            CurrentProgress = 0,
+            TotalProgress = item.TotalProgress,
+            CoverImageUrl = item.CoverImageUrl,
+            CoverImagePath = null,
+            Genres = item.Genres,
+            Synopsis = item.Synopsis,
+            ReleaseYear = item.ReleaseYear,
+            Score = null,
+            RewatchCount = 0
+        };
+
+        try
+        {
+            await Repository.AddAsync(newItem);
+            _allItems.Add(newItem);
+            await RefreshCountsAsync();
+            Recommendations.Remove(card);
+            HasRecommendations = Recommendations.Count > 0;
+            UpdateRecommendationVisibilityStates();
+            ShowRecommendationSuccess($"Added '{newItem.Title}' to {initialStatus}.");
+        }
+        catch (Exception ex)
+        {
+            RecommendationErrorMessage = $"Failed to add title: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public void SelectDiscoveryTab(DiscoveryTab tab)
+    {
+        SelectedDiscoveryTab = tab;
+    }
+
+    [RelayCommand]
+    public async Task SearchCatalogNowAsync()
+    {
+        _catalogSearchCts?.Cancel();
+        _catalogSearchCts?.Dispose();
+        _catalogSearchCts = new CancellationTokenSource();
+        await PerformCatalogSearchAsync(CatalogSearchQuery, _catalogSearchCts.Token);
+    }
+
+    private async Task TriggerCatalogSearchDebounceAsync(string query, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(400, cancellationToken);
+            await PerformCatalogSearchAsync(query, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Newer search requested
+        }
+    }
+
+    public async Task PerformCatalogSearchAsync(string? query, CancellationToken cancellationToken = default)
+    {
+        CatalogSearchErrorMessage = null;
+        HasCatalogSearchError = false;
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            CatalogSearchResults.Clear();
+            HasCatalogSearchResults = false;
+            IsLoadingCatalogSearch = false;
+            ShowEmptyCatalogSearchState = false;
+            return;
+        }
+
+        IsLoadingCatalogSearch = true;
+        ShowEmptyCatalogSearchState = false;
+
+        try
+        {
+            var results = (CatalogSearchMediaType == MediaType.Anime)
+                ? await JikanClient.SearchAnimeAsync(query, cancellationToken)
+                : await JikanClient.SearchMangaAsync(query, cancellationToken);
+
+            CatalogSearchResults.Clear();
+
+            var libraryItems = await Repository.GetAllAsync();
+            var libraryMalIds = new HashSet<(int MalId, string MalType)>(
+                libraryItems.Where(x => x.MalId.HasValue && !string.IsNullOrWhiteSpace(x.MalType))
+                            .Select(x => (x.MalId!.Value, x.MalType!.ToLowerInvariant()))
+            );
+
+            foreach (var r in results)
+            {
+                var inLib = libraryMalIds.Contains((r.MalId, r.MalType.ToLowerInvariant()));
+                var card = new CatalogSearchCardViewModel(r, CatalogSearchMediaType, inLib);
+                card.LoadCoverImage();
+                CatalogSearchResults.Add(card);
+            }
+
+            HasCatalogSearchResults = CatalogSearchResults.Count > 0;
+            ShowEmptyCatalogSearchState = !HasCatalogSearchResults;
+            if (ShowEmptyCatalogSearchState)
+            {
+                CatalogSearchEmptyMessage = $"No catalog results found for '{query}'.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Canceled by newer query
+        }
+        catch (JikanApiException ex) when (ex.IsRateLimited)
+        {
+            CatalogSearchResults.Clear();
+            HasCatalogSearchResults = false;
+            HasCatalogSearchError = true;
+            CatalogSearchErrorMessage = "Jikan API rate limit reached (HTTP 429). Please wait a moment before searching again.";
+        }
+        catch (Exception ex)
+        {
+            CatalogSearchResults.Clear();
+            HasCatalogSearchResults = false;
+            HasCatalogSearchError = true;
+            CatalogSearchErrorMessage = $"Error searching catalog: {ex.Message}";
+        }
+        finally
+        {
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                IsLoadingCatalogSearch = false;
+            }
+        }
+    }
+
+    [RelayCommand]
+    public async Task AddCatalogSearchResultToLibraryAsync(CatalogSearchCardViewModel? card)
+    {
+        if (card == null) return;
+        if (card.IsInLibrary)
+        {
+            ShowRecommendationSuccess($"'{card.Title}' is already in your library.");
+            return;
+        }
+
+        var existing = await Repository.GetByMalIdAsync(card.MalId, card.MalType);
+        if (existing != null)
+        {
+            card.IsInLibrary = true;
+            ShowRecommendationSuccess($"'{card.Title}' is already in your library.");
+            return;
+        }
+
+        var initialStatus = card.Type == MediaType.Anime ? MediaStatus.PlanToWatch : MediaStatus.PlanToRead;
+        var newItem = new MediaItem
+        {
+            MalId = card.MalId,
+            MalType = card.MalType,
+            Title = !string.IsNullOrWhiteSpace(card.EnglishTitle) ? card.EnglishTitle : card.Title,
+            Type = card.Type,
+            Status = initialStatus,
+            CurrentProgress = 0,
+            TotalProgress = card.TotalProgress,
+            CoverImageUrl = card.CoverImageUrl,
+            CoverImagePath = null,
+            Genres = card.Genres.Count > 0 ? string.Join(", ", card.Genres) : null,
+            Synopsis = card.Synopsis,
+            ReleaseYear = card.ReleaseYear,
+            Score = null,
+            RewatchCount = 0
+        };
+
+        try
+        {
+            await Repository.AddAsync(newItem);
+            _allItems.Add(newItem);
+            await RefreshCountsAsync();
+            card.IsInLibrary = true;
+            ShowRecommendationSuccess($"Added '{newItem.Title}' to {initialStatus}.");
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+            card.IsInLibrary = true;
+            ShowRecommendationSuccess($"'{card.Title}' is already in your library.");
+        }
+        catch (Exception ex)
+        {
+            RecommendationErrorMessage = $"Failed to add title: {ex.Message}";
+        }
+    }
+
+    public void ShowRecommendationSuccess(string message, int durationMs = 3000)
+    {
+        _successMessageCts?.Cancel();
+        _successMessageCts?.Dispose();
+        _successMessageCts = new CancellationTokenSource();
+        var token = _successMessageCts.Token;
+
+        RecommendationSuccessMessage = message;
+
+        _ = DismissSuccessMessageAfterDelayAsync(durationMs, token);
+    }
+
+    private async Task DismissSuccessMessageAfterDelayAsync(int delayMs, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(delayMs, cancellationToken);
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                RecommendationSuccessMessage = null;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled
+        }
     }
 
     [RelayCommand]

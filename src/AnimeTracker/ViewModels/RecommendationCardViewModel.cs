@@ -26,8 +26,14 @@ public partial class RecommendationCardViewModel : ViewModelBase
 
     public string ProgressDisplay =>
         Type == MediaType.Anime
-            ? (TotalProgress.HasValue ? $"0 / {TotalProgress} EPs" : "0 EPs")
-            : (TotalProgress.HasValue ? $"0 / {TotalProgress} CHs" : "0 CHs");
+            ? (TotalProgress.HasValue ? $"{TotalProgress} Episodes" : "Episodes unknown")
+            : (TotalProgress.HasValue ? $"{TotalProgress} Chapters" : "Chapters unknown");
+
+    public bool IsInLibrary => Id > 0;
+    public double? ExternalScore => Recommendation.ExternalScore;
+    public string? ExternalScoreDisplay => ExternalScore.HasValue ? $"★ {ExternalScore.Value:F1}" : null;
+    public string? Synopsis => Item.Synopsis;
+    public int? ReleaseYear => Item.ReleaseYear;
 
     [ObservableProperty]
     private Bitmap? _coverImage;

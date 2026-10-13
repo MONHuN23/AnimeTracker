@@ -70,7 +70,7 @@ public class MediaTrackingService
             throw new ArgumentOutOfRangeException(nameof(progress), $"Progress ({progress}) cannot exceed total progress ({item.TotalProgress.Value}).");
         }
 
-        item.CurrentProgress = progress;
+        item.TrySetProgress(progress);
         await _repository.UpdateAsync(item);
         return item;
     }

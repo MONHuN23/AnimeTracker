@@ -89,6 +89,52 @@ public class MediaDetailViewModelTests : IDisposable
         Assert.Equal("anime", vm.MalType);
         Assert.Equal("Start Rewatch", vm.RewatchActionLabel);
         Assert.False(vm.CanRewatch);
+        Assert.False(vm.StartRewatchCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void StatusChange_UpdatesCanRewatch_AndStartRewatchCommandCanExecute()
+    {
+        var item = new MediaItem { Title = "Anime", Type = MediaType.Anime, Status = MediaStatus.Watching };
+        var vm = new MediaDetailViewModel(item, _repository, _trackingService);
+
+        var canRewatchChanged = false;
+        var canExecuteChanged = false;
+        vm.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(MediaDetailViewModel.CanRewatch)) canRewatchChanged = true;
+        };
+        vm.StartRewatchCommand.CanExecuteChanged += (s, e) => canExecuteChanged = true;
+
+        Assert.False(vm.CanRewatch);
+        Assert.False(vm.StartRewatchCommand.CanExecute(null));
+
+        vm.Status = MediaStatus.Completed;
+
+        Assert.True(vm.CanRewatch);
+        Assert.True(canRewatchChanged);
+        Assert.True(canExecuteChanged);
+        Assert.True(vm.StartRewatchCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void ProgressChange_NotifiesProgressDisplay()
+    {
+        var item = new MediaItem { Title = "Anime", Type = MediaType.Anime, Status = MediaStatus.Watching, CurrentProgress = 1, TotalProgress = 12 };
+        var vm = new MediaDetailViewModel(item, _repository, _trackingService);
+
+        var notified = false;
+        vm.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(MediaDetailViewModel.ProgressDisplay)) notified = true;
+        };
+
+        vm.CurrentProgress = 2;
+        Assert.True(notified);
+
+        notified = false;
+        vm.TotalProgress = 24;
+        Assert.True(notified);
     }
 
     [Fact]
@@ -607,5 +653,61 @@ public class MediaDetailViewModelTests : IDisposable
         {
             if (Directory.Exists(coversDir)) Directory.Delete(coversDir, true);
         }
+    }
+
+    [Fact]
+    public async Task CurrentProgress_CanBeNull_DuringEditing_AndSaveDefaultsToZero()
+    {
+        var item = new MediaItem
+        {
+            Title = "Test Anime",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching,
+            CurrentProgress = 5,
+            TotalProgress = 12
+        };
+        await _repository.AddAsync(item);
+
+        var vm = new MediaDetailViewModel(item, _repository, _trackingService);
+        Assert.Equal(5, vm.CurrentProgress);
+
+        // User clears the field:
+        vm.CurrentProgress = null;
+        Assert.Null(vm.CurrentProgress);
+
+        // Saving with null progress safely defaults to 0 without throwing
+        var saved = await vm.SaveAsync();
+        Assert.True(saved);
+        Assert.Equal(0, vm.CurrentProgress);
+
+        var fresh = await _repository.GetByIdAsync(item.Id);
+        Assert.Equal(0, fresh!.CurrentProgress);
+    }
+
+    [Fact]
+    public async Task CurrentProgress_WhenSetToNewValueAfterNull_SavesCorrectValue()
+    {
+        var item = new MediaItem
+        {
+            Title = "Test Manga",
+            Type = MediaType.Manga,
+            Status = MediaStatus.Reading,
+            CurrentProgress = 0,
+            TotalProgress = 100
+        };
+        await _repository.AddAsync(item);
+
+        var vm = new MediaDetailViewModel(item, _repository, _trackingService);
+
+        // User clears the field (null) and types 42
+        vm.CurrentProgress = null;
+        vm.CurrentProgress = 42;
+
+        var saved = await vm.SaveAsync();
+        Assert.True(saved);
+        Assert.Equal(42, vm.CurrentProgress);
+
+        var fresh = await _repository.GetByIdAsync(item.Id);
+        Assert.Equal(42, fresh!.CurrentProgress);
     }
 }

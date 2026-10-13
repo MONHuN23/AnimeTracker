@@ -116,4 +116,80 @@ public class MediaCardViewModelTests : IDisposable
             }
         }
     }
+
+    [Fact]
+    public void ChangingCurrentProgress_NotifiesProgressDisplay()
+    {
+        var item = new MediaItem
+        {
+            Id = 1,
+            Title = "Test Anime",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching,
+            CurrentProgress = 0,
+            TotalProgress = 12
+        };
+
+        var vm = new MediaCardViewModel(item, _trackingService);
+        var notified = false;
+        vm.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(MediaCardViewModel.ProgressDisplay))
+            {
+                notified = true;
+            }
+        };
+
+        vm.CurrentProgress = 1;
+
+        Assert.True(notified);
+        Assert.Equal("EP 1 / 12", vm.ProgressDisplay);
+    }
+
+    [Theory]
+    [InlineData(MediaType.Anime, MediaStatus.Watching, "Anime · Watching")]
+    [InlineData(MediaType.Manga, MediaStatus.OnHold, "Manga · OnHold")]
+    [InlineData(MediaType.Anime, MediaStatus.Completed, "Anime · Completed")]
+    [InlineData(MediaType.Manhwa, MediaStatus.PlanToRead, "Manhwa · PlanToRead")]
+    public void TypeDisplay_DisplaysMediaTypeAndStatus(MediaType type, MediaStatus status, string expected)
+    {
+        var item = new MediaItem
+        {
+            Id = 1,
+            Title = "Sample Title",
+            Type = type,
+            Status = status
+        };
+
+        var vm = new MediaCardViewModel(item, _trackingService);
+
+        Assert.Equal(expected, vm.TypeDisplay);
+    }
+
+    [Fact]
+    public void ChangingStatus_NotifiesTypeDisplay()
+    {
+        var item = new MediaItem
+        {
+            Id = 1,
+            Title = "Sample Anime",
+            Type = MediaType.Anime,
+            Status = MediaStatus.Watching
+        };
+
+        var vm = new MediaCardViewModel(item, _trackingService);
+        var notified = false;
+        vm.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(MediaCardViewModel.TypeDisplay))
+            {
+                notified = true;
+            }
+        };
+
+        vm.Status = MediaStatus.Completed;
+
+        Assert.True(notified);
+        Assert.Equal("Anime · Completed", vm.TypeDisplay);
+    }
 }

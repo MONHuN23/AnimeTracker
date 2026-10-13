@@ -16,7 +16,7 @@ Főbb funkciók:
 - **Kézi felvitel (Manual Entry):** Offline vagy nem listázott címek hozzáadása kezdő haladással (amely automatikusan beállítja az aktív státuszt), testreszabható egységekkel és leírásokkal.
 - **Saját borítókép feltöltése:** Helyi képfájlok kiválasztása (PNG, JPEG, WebP <= 10 MB), magic bytes ellenőrzés, előnézet, helyi perzisztens tárolás és hordozható relatív útvonalak kezelése.
 - **Közvetlen haladásmódosítás:** Tetszőleges számérték megadása a részletező ablakban (pl. 1200. epizód) típusfüggő egységcímkékkel (*Episode* / *Chapter*).
-- **Intelligens Backlog-ajánló:** A legalább 8/10-re értékelt kedvencek műfaji súlyozása alapján rangsorolt javaslatok a még el nem kezdett címekre, tényszerű indoklással.
+- **Személyre szabott Jikan és Backlog ajánlórendszer:** A felhasználó legalább 8/10-re értékelt címeiből előállított ízlésprofil alapján a Jikan API v4 (és Kitsu fallback) segítségével új, még fel nem vett címek felkutatása, determinisztikus rangsorolás, duplikációvédelem és közvetlen könyvtárhoz adás (`+ Add to Library`).
 - **Biztonsági mentés (JSON Export/Import):** Teljes könyvtár mentése Base64-be ágyazott helyi képekkel, előzetes validációval és atomi SQLite tranzakciós cseremodellel.
 
 ### 1.2. Technológiai alapok
@@ -24,8 +24,8 @@ Főbb funkciók:
 - **UI Keretrendszer:** Avalonia UI 12.1.4 (Desktop XAML, FluentTheme sötét variánssal)
 - **MVVM minta:** `CommunityToolkit.Mvvm` 8.4.2 (Source generált `[ObservableProperty]`, `[RelayCommand]`)
 - **Adattárolás:** Helyi SQLite adatbázis (`Microsoft.Data.Sqlite` 10.0.12, Dapper 2.1.89 micro-ORM; **EF Core szigorúan kizárva**)
-- **Külső API:** Jikan API v4 REST kliens (`System.Net.Http.HttpClient` és `System.Text.Json`)
-- **Tesztelés:** xUnit 2.9.3 automatizált tesztcsomag (148 lefutó teszt, szigorú TDD)
+- **Külső API:** Jikan API v4 REST kliens (`System.Net.Http.HttpClient` és `System.Text.Json`), Kitsu fallback
+- **Tesztelés:** xUnit 2.9.3 automatizált tesztcsomag (197 lefutó teszt, szigorú TDD)
 
 ### 1.3. Fő könyvtárak és felelősségek
 ```text
@@ -106,13 +106,28 @@ AnimeTracker/
   - Csak `Completed` státuszú címnél érhető el.
   - `RewatchCount` növekszik 1-gyel, `CurrentProgress` visszaáll 0-ra, a státusz pedig visszavált `Watching`-ra vagy `Reading`-re.
 
-### 2.5. Adatfolyam: Ajánlórendszer (Recommendation Engine)
-1. Bemenet: Az adatbázisban lévő összes elem.
-2. A `RecommendationService` kiszűri a legalább 8/10-re értékelt címeket (`Score >= 8`).
-3. Kiszámítja a kedvenc műfajok súlyozott gyakoriságát (egy műfaj súlya a címek pontszámainak összege).
-4. Keresi a célcsoportot: **Kizárólag** a még el nem kezdett backlog elemeket (`PlanToWatch`, `PlanToRead`).
-5. Kiszámítja az egyezési pontszámot (`MatchScore`), és részletes indoklást generál (pl. *"Matches your highly rated genres: Action, Fantasy"*).
-6. Az ajánlások műfaj és médiumtípus szerint szűrhetők a felületen.
+### 2.5. Adatfolyam: Ajánlórendszer (Personalized Jikan & Backlog Engine)
+1. **Ízlésprofil felépítése (`BuildTasteProfile`):**
+   - Bemenet: Az adatbázisban lévő összes elem és az aktuális médiumszűrő (`MediaTypeFilter`).
+   - A rendszer kizárólag a legalább 8/10-re értékelt címeket (`Score >= 8`) veszi figyelembe a szűrésnek megfelelő típusokból (Anime vs. Manga/Manhwa).
+   - Kiszámítja a műfajok súlyát: minden kedvenc elem pontszáma hozzáadódik az adott műfaj összsúlyához (`genreWeights`).
+   - Ha nincs legalább egy 8/10-es értékelés, a profil üres marad, és egyértelmű útmutatás jelenik meg ("Rate some titles 8/10 or higher...").
+2. **Katalóguslekérdezés (`GetExternalRecommendationsAsync`):**
+   - A Jikan API v4 `anime?genres={id}&order_by=score&sort=desc` és `manga?genres={id}&order_by=score&sort=desc` végpontjain (illetve Kitsu kategória fallbacken) keresztül lekéri a legnépszerűbb címeket a felhasználó top 1-2 kedvenc műfajában (vagy a kiválasztott műfajban).
+   - Memóriabeli gyorsítótár (`_genreCache`, 10 perces TTL) és `CancellationToken` védi a klienst a felesleges hálózati kérésektől és az API rate limit túllépésétől (HTTP 429).
+3. **Duplikációvédelem és szűrés:**
+   - **Könyvtári kizárás:** A rendszer kiszűri mindazokat a címeket, amelyek stabil azonosító (`MalId, MalType`) vagy normalizált cím alapján már szerepelnek a felhasználó könyvtárában, függetlenül azok státuszától.
+   - **Kandidátusok közötti deduplikáció:** Az azonos külső címek vagy azonos azonosítójú találatok egymás között is kiszűrésre kerülnek.
+4. **Determinisztikus rangsorolási algoritmus (`RankCandidates`):**
+   - **Műfaji affinitás ($S_{genre}$):** A találat műfajainak súlyösszege a felhasználó ízlésprofiljából.
+   - **Közösségi minőségi faktor ($S_{quality}$):** A külső pontszám mérsékelt bónusza (`Score * 1.5`).
+   - **Diverzitási csillapítás ($D$):** Kategória-dominancia elleni szorzó az azonos elsődleges műfajú címeknél.
+   - Végső determinisztikus pontszám: `Math.Round((S_genre * 2.0 * D) + S_quality, 1)`.
+   - Tényszerű indoklás generálása (pl. *"Matches your highly rated genres: Action, Fantasy"*).
+5. **Közvetlen könyvtárhoz adás (`+ Add to Library`):**
+   - A felhasználó az ajánlókártyán lévő gombbal azonnal felveheti a címet `PlanToWatch` vagy `PlanToRead` státuszban.
+   - A cím bekerül az SQLite adatbázisba, frissülnek a könyvtári számlálók, és a tétel azonnal eltűnik az aktív ajánlások közül.
+   - A meglévő szinkron backlog-ajánló (`GetRecommendations`) a háttérben azonnali átmenetet és kompatibilitást biztosít.
 
 ### 2.6. Adatfolyam: Biztonsági mentés (JSON Export és Import)
 1. **Export:**

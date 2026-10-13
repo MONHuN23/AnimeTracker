@@ -46,6 +46,10 @@ public class MediaItem
         if (newProgress < 0) return false;
         if (TotalProgress.HasValue && newProgress > TotalProgress.Value) return false;
         CurrentProgress = newProgress;
+        if (TotalProgress.HasValue && TotalProgress.Value > 0 && CurrentProgress >= TotalProgress.Value)
+        {
+            Status = MediaStatus.Completed;
+        }
         return true;
     }
 
@@ -62,6 +66,10 @@ public class MediaItem
         }
 
         CurrentProgress++;
+        if (TotalProgress.HasValue && TotalProgress.Value > 0 && CurrentProgress >= TotalProgress.Value)
+        {
+            Status = MediaStatus.Completed;
+        }
         return true;
     }
 

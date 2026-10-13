@@ -49,129 +49,7 @@
 
         <!-- Main Tabs -->
         <TabControl Grid.Row="1" Background="Transparent">
-            <!-- TAB 1: JIKAN SEARCH -->
-            <TabItem Header="Search Catalog">
-                <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0,16,0,0">
-                    <!-- Media Type Filter & Query Input -->
-                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12">
-                        <ComboBox Grid.Column="0"
-                                  Width="130"
-                                  Margin="0,0,10,0"
-                                  SelectedItem="{Binding SearchMediaType}">
-                            <models:MediaType>Anime</models:MediaType>
-                            <models:MediaType>Manga</models:MediaType>
-                            <models:MediaType>Manhwa</models:MediaType>
-                        </ComboBox>
-
-                        <TextBox Grid.Column="1"
-                                 Text="{Binding SearchQuery, Mode=TwoWay}"
-                                 PlaceholderText="Type title to search (e.g. One Piece, Solo Leveling, Chainsaw Man)..."
-                                 FontSize="13" />
-
-                        <Button Grid.Column="2"
-                                Content="Search"
-                                Command="{Binding SearchNowCommand}"
-                                Margin="10,0,0,0"
-                                Background="{StaticResource AppAccentBrush}"
-                                Foreground="White"
-                                FontWeight="SemiBold"
-                                CornerRadius="6"
-                                Padding="14,6"
-                                VerticalAlignment="Stretch" />
-                    </Grid>
-
-                    <!-- Status / Notification Banners -->
-                    <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,10">
-                        <ProgressBar IsIndeterminate="True"
-                                     IsVisible="{Binding IsLoading}"
-                                     Height="3"
-                                     Foreground="{StaticResource AppAccentBrush}" />
-
-                        <!-- Error Banner -->
-                        <Border IsVisible="{Binding SearchErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                Background="#3a1c1c"
-                                BorderBrush="#ef4444"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="12,8">
-                            <TextBlock Text="{Binding SearchErrorMessage}" Foreground="#fca5a5" FontSize="12" />
-                        </Border>
-
-                        <!-- Action/Duplicate Warning Banner -->
-                        <Border IsVisible="{Binding ActionMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                Background="#3a2e1c"
-                                BorderBrush="#f59e0b"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="12,8">
-                            <TextBlock Text="{Binding ActionMessage}" Foreground="#fde68a" FontSize="12" />
-                        </Border>
-                    </StackPanel>
-
-                    <!-- Results List -->
-                    <Border Grid.Row="2"
-                            Background="{StaticResource AppSurfaceBrush}"
-                            BorderBrush="{StaticResource AppBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            ClipToBounds="True">
-                        <ListBox ItemsSource="{Binding SearchResults}"
-                                 SelectedItem="{Binding SelectedSearchResult}"
-                                 Background="Transparent">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="jikan:JikanSearchResult">
-                                    <Grid ColumnDefinitions="*,Auto" Margin="6,4">
-                                        <StackPanel Grid.Column="0" Spacing="4">
-                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" />
-                                            <TextBlock Text="{Binding EnglishTitle}"
-                                                       FontSize="12"
-                                                       Foreground="{StaticResource AppTextSecondaryBrush}"
-                                                       IsVisible="{Binding EnglishTitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                                <TextBlock Text="{Binding TotalCount, StringFormat='Count: {0}'}"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource AppTextSecondaryBrush}"
-                                                           IsVisible="{Binding TotalCount, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                                                <TextBlock Text="{Binding Score, StringFormat='★ {0}'}"
-                                                           FontSize="11"
-                                                           Foreground="#fbbf24"
-                                                           FontWeight="SemiBold"
-                                                           IsVisible="{Binding Score, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                                                <TextBlock Text="{Binding Year, StringFormat='Year: {0}'}"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource AppTextSecondaryBrush}"
-                                                           IsVisible="{Binding Year, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                                            </StackPanel>
-                                        </StackPanel>
-
-                                        <Border Grid.Column="1"
-                                                Background="{StaticResource AppBorderBrush}"
-                                                CornerRadius="4"
-                                                Padding="6,2"
-                                                VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding MalType}" FontSize="10" TextElement.FontWeight="Bold" Foreground="{StaticResource AppTextSecondaryBrush}" />
-                                        </Border>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Border>
-
-                    <!-- Catalog Action Buttons -->
-                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,16,0,0">
-                        <Button Content="Cancel" Command="{Binding CancelCommand}" CornerRadius="6" Padding="16,8" />
-                        <Button Content="+ Add to Library"
-                                Command="{Binding AddSelectedCatalogTitleCommand}"
-                                Background="{StaticResource AppAccentBrush}"
-                                Foreground="White"
-                                FontWeight="SemiBold"
-                                CornerRadius="6"
-                                Padding="16,8" />
-                    </StackPanel>
-                </Grid>
-            </TabItem>
-
-            <!-- TAB 2: MANUAL ENTRY -->
+            <!-- TAB 1: MANUAL ENTRY -->
             <TabItem Header="Manual Entry">
                 <ScrollViewer Margin="0,16,0,0">
                     <StackPanel Spacing="14" MaxWidth="600" HorizontalAlignment="Left">
@@ -299,6 +177,148 @@
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 2: JIKAN SEARCH -->
+            <TabItem Header="Search Catalog">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0,16,0,0">
+                    <!-- Media Type Filter & Query Input -->
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12">
+                        <ComboBox Grid.Column="0"
+                                  Width="130"
+                                  Margin="0,0,10,0"
+                                  SelectedItem="{Binding SearchMediaType}">
+                            <models:MediaType>Anime</models:MediaType>
+                            <models:MediaType>Manga</models:MediaType>
+                            <models:MediaType>Manhwa</models:MediaType>
+                        </ComboBox>
+
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding SearchQuery, Mode=TwoWay}"
+                                 PlaceholderText="Type title to search (e.g. One Piece, Solo Leveling, Chainsaw Man)..."
+                                 FontSize="13" />
+
+                        <Button Grid.Column="2"
+                                Content="Search"
+                                Command="{Binding SearchNowCommand}"
+                                Margin="10,0,0,0"
+                                Background="{StaticResource AppAccentBrush}"
+                                Foreground="White"
+                                FontWeight="SemiBold"
+                                CornerRadius="6"
+                                Padding="14,6"
+                                VerticalAlignment="Stretch" />
+                    </Grid>
+
+                    <!-- Status / Notification Banners -->
+                    <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,10">
+                        <ProgressBar IsIndeterminate="True"
+                                     IsVisible="{Binding IsLoading}"
+                                     Height="3"
+                                     Foreground="{StaticResource AppAccentBrush}" />
+
+                        <!-- Error Banner -->
+                        <Border IsVisible="{Binding SearchErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Background="#3a1c1c"
+                                BorderBrush="#ef4444"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12,8">
+                            <TextBlock Text="{Binding SearchErrorMessage}" Foreground="#fca5a5" FontSize="12" />
+                        </Border>
+
+                        <!-- Action/Duplicate Warning Banner -->
+                        <Border IsVisible="{Binding ActionMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Background="#3a2e1c"
+                                BorderBrush="#f59e0b"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12,8">
+                            <TextBlock Text="{Binding ActionMessage}" Foreground="#fde68a" FontSize="12" />
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Results List with Cover Images -->
+                    <Border Grid.Row="2"
+                            Background="{StaticResource AppSurfaceBrush}"
+                            BorderBrush="{StaticResource AppBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            ClipToBounds="True">
+                        <ListBox ItemsSource="{Binding SearchResults}"
+                                 SelectedItem="{Binding SelectedSearchResult}"
+                                 Background="Transparent">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="jikan:JikanSearchResult">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="6,4">
+                                        <!-- Cover Thumbnail -->
+                                        <Border Grid.Column="0"
+                                                Width="42" Height="60"
+                                                CornerRadius="4"
+                                                ClipToBounds="True"
+                                                Background="{StaticResource AppBorderBrush}"
+                                                Margin="0,0,12,0">
+                                            <Panel>
+                                                <TextBlock Text="🎬"
+                                                           FontSize="14"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                                <Image Source="{Binding CoverImage}"
+                                                       Stretch="UniformToFill"
+                                                       IsVisible="{Binding CoverImage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </Panel>
+                                        </Border>
+
+                                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding EnglishTitle}"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       IsVisible="{Binding EnglishTitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <TextBlock Text="{Binding TotalCount, StringFormat='Count: {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                           IsVisible="{Binding TotalCount, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                <TextBlock Text="{Binding Score, StringFormat='★ {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="#fbbf24"
+                                                           FontWeight="SemiBold"
+                                                           IsVisible="{Binding Score, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                <TextBlock Text="{Binding Year, StringFormat='Year: {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                           IsVisible="{Binding Year, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                        <Border Grid.Column="2"
+                                                Background="{StaticResource AppBorderBrush}"
+                                                CornerRadius="4"
+                                                Padding="6,2"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding MalType}" FontSize="10" TextElement.FontWeight="Bold" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
+
+                    <!-- Catalog Action Buttons -->
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,16,0,0">
+                        <Button Content="Cancel" Command="{Binding CancelCommand}" CornerRadius="6" Padding="16,8" />
+                        <Button Content="+ Add to Library"
+                                Command="{Binding AddSelectedCatalogTitleCommand}"
+                                Background="{StaticResource AppAccentBrush}"
+                                Foreground="White"
+                                FontWeight="SemiBold"
+                                CornerRadius="6"
+                                Padding="16,8" />
+                    </StackPanel>
+                </Grid>
             </TabItem>
         </TabControl>
     </Grid>

@@ -46,6 +46,28 @@
         <Style Selector="Button.card-link:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent" />
         </Style>
+        <Style Selector="Button.discovery-tab">
+            <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource AppTextSecondaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+        <Style Selector="Button.discovery-tab:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AppSurfaceHoverBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource AppTextPrimaryBrush}" />
+        </Style>
+        <Style Selector="Button.discovery-tab.selected">
+            <Setter Property="Background" Value="{StaticResource AppAccentBrush}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
+        </Style>
+        <Style Selector="Button.discovery-tab.selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AppAccentBrush}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
     </Window.Styles>
 
     <Grid ColumnDefinitions="260,*">
@@ -261,7 +283,7 @@
                                             <!-- Poster Cover Area with Placeholder (Clickable to open details) -->
                                             <Button Grid.Row="0"
                                                     Classes="card-link"
-                                                    Command="{Binding ((vm:MainWindowViewModel)DataContext).OpenDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenDetailCommand}"
                                                     CommandParameter="{Binding}"
                                                     HorizontalAlignment="Stretch"
                                                     VerticalAlignment="Stretch"
@@ -315,7 +337,7 @@
                                             <!-- Card Info and Stepper -->
                                             <StackPanel Grid.Row="1" Margin="12,10" Spacing="4">
                                                 <Button Classes="card-link"
-                                                        Command="{Binding ((vm:MainWindowViewModel)DataContext).OpenDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenDetailCommand}"
                                                         CommandParameter="{Binding}"
                                                         HorizontalAlignment="Left"
                                                         HorizontalContentAlignment="Left">
@@ -408,10 +430,53 @@
                     </Grid>
                 </ScrollViewer>
 
-                <!-- 2. Recommendations Section -->
-                <Grid IsVisible="{Binding IsRecommendationsSection}" RowDefinitions="Auto,*" Margin="24">
-                    <!-- Recommendations Filter Toolbar -->
-                    <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,16">
+                <!-- 2. Recommendations & Discovery Section -->
+                <Grid IsVisible="{Binding IsRecommendationsSection}" RowDefinitions="Auto,Auto,*" Margin="24">
+                    <!-- Top Discovery Mode Selector Tabs -->
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="0,0,0,16">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                            <Button Classes="discovery-tab"
+                                    Classes.selected="{Binding IsDiscoveryRecommendationsTab}"
+                                    Command="{Binding SelectDiscoveryTabCommand}"
+                                    CommandParameter="{x:Static vm:DiscoveryTab.Recommendations}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="★" Foreground="#fbbf24" VerticalAlignment="Center" />
+                                    <TextBlock Text="Recommendations For You" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="discovery-tab"
+                                    Classes.selected="{Binding IsDiscoverySearchTab}"
+                                    Command="{Binding SelectDiscoveryTabCommand}"
+                                    CommandParameter="{x:Static vm:DiscoveryTab.Search}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="🔍" VerticalAlignment="Center" />
+                                    <TextBlock Text="Search Catalog" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Success Message Banner -->
+                    <Border Grid.Row="1"
+                            Background="#1b2e23"
+                            BorderBrush="#22c55e"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14,10"
+                            Margin="0,0,0,14"
+                            IsVisible="{Binding RecommendationSuccessMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Text="✓" FontSize="14" FontWeight="Bold" Foreground="#22c55e" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{Binding RecommendationSuccessMessage}" FontSize="12" Foreground="#86efac" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Row 2: Sub-views -->
+                    <Grid Grid.Row="2">
+                        <!-- SUB-VIEW 1: PERSONALIZED RECOMMENDATIONS -->
+                        <Grid IsVisible="{Binding IsDiscoveryRecommendationsTab}" RowDefinitions="Auto,*">
+                            <!-- Recommendations Filter Toolbar -->
+                            <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,0,0,16">
                         <!-- Media Type Filter -->
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,16,0">
                             <TextBlock Text="Type:"
@@ -431,7 +496,7 @@
                         </StackPanel>
 
                         <!-- Genre Filter -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,16,0">
                             <TextBlock Text="Genre:"
                                        VerticalAlignment="Center"
                                        FontSize="13"
@@ -444,18 +509,131 @@
                                       Width="160" />
                         </StackPanel>
 
-                        <TextBlock Grid.Column="3"
-                                   Text="Backlog recommendations based on your favorite genres from titles rated 8/10 or higher"
+                        <!-- Refresh Button -->
+                        <Button Grid.Column="2"
+                                Command="{Binding RefreshRecommendationsCommand}"
+                                Background="{StaticResource AppSurfaceBrush}"
+                                BorderBrush="{StaticResource AppBorderBrush}"
+                                BorderThickness="1"
+                                Foreground="{StaticResource AppTextPrimaryBrush}"
+                                CornerRadius="6"
+                                Padding="12,6"
+                                VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="↻" FontSize="13" FontWeight="Bold" />
+                                <TextBlock Text="Refresh" FontSize="12" />
+                            </StackPanel>
+                        </Button>
+
+                        <TextBlock Grid.Column="4"
+                                   Text="Personalized recommendations discovered from Jikan based on your 8/10+ rated titles"
                                    FontSize="12"
                                    FontStyle="Italic"
                                    Foreground="{StaticResource AppTextSecondaryBrush}"
                                    VerticalAlignment="Center" />
                     </Grid>
 
-                    <!-- Recommendations List / Cards -->
+                    <!-- Recommendations List / Cards Area -->
                     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                         <Grid>
-                            <!-- Recommendations Card Grid -->
+                            <!-- 1. Loading State -->
+                            <Grid HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  IsVisible="{Binding IsLoadingRecommendations}"
+                                  Margin="0,80,0,0">
+                                <StackPanel Spacing="14" HorizontalAlignment="Center">
+                                    <ProgressBar IsIndeterminate="True"
+                                                 Width="240"
+                                                 Height="4"
+                                                 Foreground="{StaticResource AppAccentBrush}"
+                                                 Background="#262638" />
+                                    <TextBlock Text="Discovering personalized recommendations..."
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource AppTextPrimaryBrush}"
+                                               HorizontalAlignment="Center" />
+                                    <TextBlock Text="Querying catalog and calculating taste match scores"
+                                               FontSize="12"
+                                               Foreground="{StaticResource AppTextSecondaryBrush}"
+                                               HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 2. Error State -->
+                            <Grid HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  IsVisible="{Binding HasRecommendationError}"
+                                  Margin="0,60,0,0">
+                                <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="440">
+                                    <Border Width="56" Height="56"
+                                            Background="#2e171b"
+                                            BorderBrush="#ef4444"
+                                            BorderThickness="1"
+                                            CornerRadius="14"
+                                            HorizontalAlignment="Center">
+                                        <TextBlock Text="⚠️"
+                                                   FontSize="24"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <TextBlock Text="Unable to load recommendations"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               Foreground="{StaticResource AppTextPrimaryBrush}" />
+
+                                    <TextBlock Text="{Binding RecommendationErrorMessage}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap"
+                                               TextAlignment="Center"
+                                               Foreground="#fca5a5" />
+
+                                    <Button Content="Retry"
+                                            Command="{Binding RefreshRecommendationsCommand}"
+                                            Background="{StaticResource AppAccentBrush}"
+                                            Foreground="White"
+                                            FontWeight="SemiBold"
+                                            Padding="18,8"
+                                            CornerRadius="6"
+                                            HorizontalAlignment="Center"
+                                            Margin="0,8,0,0" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 3. Empty State message -->
+                            <Grid HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  IsVisible="{Binding ShowEmptyRecommendationState}"
+                                  Margin="0,60,0,0">
+                                <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="440">
+                                    <Border Width="56" Height="56"
+                                            Background="{StaticResource AppSurfaceBrush}"
+                                            BorderBrush="{StaticResource AppBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="14"
+                                            HorizontalAlignment="Center">
+                                        <TextBlock Text="💡"
+                                                   FontSize="24"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <TextBlock Text="No recommendations available"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               Foreground="{StaticResource AppTextPrimaryBrush}" />
+
+                                    <TextBlock Text="{Binding RecommendationEmptyMessage}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap"
+                                               TextAlignment="Center"
+                                               Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 4. Recommendations Card Grid -->
                             <ItemsControl ItemsSource="{Binding Recommendations}"
                                           IsVisible="{Binding HasRecommendations}">
                                 <ItemsControl.ItemsPanel>
@@ -477,7 +655,7 @@
                                                 <!-- Clickable Poster Area -->
                                                 <Button Grid.Row="0"
                                                         Classes="card-link"
-                                                        Command="{Binding ((vm:MainWindowViewModel)DataContext).OpenRecommendationDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenRecommendationDetailCommand}"
                                                         CommandParameter="{Binding}"
                                                         HorizontalAlignment="Stretch"
                                                         VerticalAlignment="Stretch"
@@ -522,10 +700,10 @@
                                                     </Grid>
                                                 </Button>
 
-                                                <!-- Card Info & Factual Reason -->
+                                                <!-- Card Info, Factual Reason, and Action -->
                                                 <StackPanel Grid.Row="1" Margin="12,10" Spacing="6">
                                                     <Button Classes="card-link"
-                                                            Command="{Binding ((vm:MainWindowViewModel)DataContext).OpenRecommendationDetailCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenRecommendationDetailCommand}"
                                                             CommandParameter="{Binding}"
                                                             HorizontalAlignment="Left"
                                                             HorizontalContentAlignment="Left">
@@ -553,17 +731,131 @@
                                                     <TextBlock Text="{Binding ProgressDisplay}"
                                                                FontSize="11"
                                                                Foreground="{StaticResource AppTextSecondaryBrush}" />
+
+                                                    <!-- Direct Add to Library Button -->
+                                                    <Button Content="+ Add to Library"
+                                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).AddRecommendationToLibraryCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="{StaticResource AppAccentBrush}"
+                                                            Foreground="White"
+                                                            FontWeight="SemiBold"
+                                                            FontSize="12"
+                                                            Padding="10,6"
+                                                            CornerRadius="6"
+                                                            HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Center"
+                                                            Margin="0,4,0,0" />
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
 
-                            <!-- Empty State message -->
+                <!-- SUB-VIEW 2: SEARCH CATALOG -->
+                <Grid IsVisible="{Binding IsDiscoverySearchTab}" RowDefinitions="Auto,*">
+                    <!-- Search Input & Type Filter Toolbar -->
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,16">
+                        <ComboBox Grid.Column="0"
+                                  SelectedItem="{Binding CatalogSearchMediaType}"
+                                  Background="{StaticResource AppSurfaceBrush}"
+                                  BorderBrush="{StaticResource AppBorderBrush}"
+                                  CornerRadius="6"
+                                  Width="120"
+                                  Margin="0,0,12,0">
+                            <models:MediaType>Anime</models:MediaType>
+                            <models:MediaType>Manga</models:MediaType>
+                            <models:MediaType>Manhwa</models:MediaType>
+                        </ComboBox>
+
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding CatalogSearchQuery, Mode=TwoWay}"
+                                 PlaceholderText="Search anime, manga, or manhwa by title (e.g. One Piece, Solo Leveling)..."
+                                 Background="{StaticResource AppSurfaceBrush}"
+                                 BorderBrush="{StaticResource AppBorderBrush}"
+                                 CornerRadius="6"
+                                 FontSize="13" />
+
+                        <Button Grid.Column="2"
+                                Content="Search"
+                                Command="{Binding SearchCatalogNowCommand}"
+                                Background="{StaticResource AppAccentBrush}"
+                                Foreground="White"
+                                FontWeight="SemiBold"
+                                CornerRadius="6"
+                                Padding="16,8"
+                                Margin="10,0,0,0"
+                                VerticalAlignment="Stretch" />
+                    </Grid>
+
+                    <!-- Results and Status ScrollViewer -->
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <Grid>
+                            <!-- 1. Loading State -->
                             <Grid HorizontalAlignment="Center"
                                   VerticalAlignment="Center"
-                                  IsVisible="{Binding !HasRecommendations}"
+                                  IsVisible="{Binding IsLoadingCatalogSearch}"
+                                  Margin="0,80,0,0">
+                                <StackPanel Spacing="14" HorizontalAlignment="Center">
+                                    <ProgressBar IsIndeterminate="True"
+                                                 Width="240"
+                                                 Height="4"
+                                                 Foreground="{StaticResource AppAccentBrush}"
+                                                 Background="#262638" />
+                                    <TextBlock Text="Searching Jikan catalog..."
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource AppTextPrimaryBrush}"
+                                               HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 2. Error State -->
+                            <Grid HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  IsVisible="{Binding HasCatalogSearchError}"
+                                  Margin="0,60,0,0">
+                                <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="440">
+                                    <Border Width="56" Height="56"
+                                            Background="#2e171b"
+                                            BorderBrush="#ef4444"
+                                            BorderThickness="1"
+                                            CornerRadius="14"
+                                            HorizontalAlignment="Center">
+                                        <TextBlock Text="⚠️"
+                                                   FontSize="24"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="Catalog search failed"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               Foreground="{StaticResource AppTextPrimaryBrush}" />
+                                    <TextBlock Text="{Binding CatalogSearchErrorMessage}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap"
+                                               TextAlignment="Center"
+                                               Foreground="#fca5a5" />
+                                    <Button Content="Retry"
+                                            Command="{Binding SearchCatalogNowCommand}"
+                                            Background="{StaticResource AppAccentBrush}"
+                                            Foreground="White"
+                                            FontWeight="SemiBold"
+                                            Padding="18,8"
+                                            CornerRadius="6"
+                                            HorizontalAlignment="Center"
+                                            Margin="0,8,0,0" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 3. Empty Search State -->
+                            <Grid HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  IsVisible="{Binding ShowEmptyCatalogSearchState}"
                                   Margin="0,60,0,0">
                                 <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="440">
                                     <Border Width="56" Height="56"
@@ -572,28 +864,158 @@
                                             BorderThickness="1"
                                             CornerRadius="14"
                                             HorizontalAlignment="Center">
-                                        <TextBlock Text="💡"
+                                        <TextBlock Text="🔍"
                                                    FontSize="24"
                                                    HorizontalAlignment="Center"
                                                    VerticalAlignment="Center" />
                                     </Border>
-
-                                    <TextBlock Text="No recommendations available"
+                                    <TextBlock Text="No results found"
                                                FontSize="16"
                                                FontWeight="SemiBold"
                                                HorizontalAlignment="Center"
                                                Foreground="{StaticResource AppTextPrimaryBrush}" />
-
-                                    <TextBlock Text="{Binding RecommendationEmptyMessage}"
+                                    <TextBlock Text="{Binding CatalogSearchEmptyMessage}"
                                                FontSize="13"
                                                TextWrapping="Wrap"
                                                TextAlignment="Center"
                                                Foreground="{StaticResource AppTextSecondaryBrush}" />
                                 </StackPanel>
                             </Grid>
+
+                            <!-- 4. Catalog Search Results Grid -->
+                            <ItemsControl ItemsSource="{Binding CatalogSearchResults}"
+                                          IsVisible="{Binding HasCatalogSearchResults}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:CatalogSearchCardViewModel">
+                                        <Border Classes="media-card"
+                                                Width="230"
+                                                Margin="8"
+                                                Background="{StaticResource AppSurfaceBrush}"
+                                                BorderBrush="{StaticResource AppBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="10"
+                                                ClipToBounds="True">
+                                            <Grid RowDefinitions="150,*">
+                                                <!-- Poster Area -->
+                                                <Grid Grid.Row="0" Background="#181824" ClipToBounds="True">
+                                                    <Image Source="{Binding CoverImage}"
+                                                           Stretch="UniformToFill"
+                                                           IsVisible="{Binding CoverImage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                    <Border IsVisible="{Binding CoverImage, Converter={x:Static ObjectConverters.IsNull}}"
+                                                            Background="#1e1e2c">
+                                                        <TextBlock Text="🎬"
+                                                                   FontSize="32"
+                                                                   Foreground="#3b3b4f"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center" />
+                                                    </Border>
+                                                    <!-- Type Badge (Top-Left) -->
+                                                    <Border Background="#cc000000"
+                                                            CornerRadius="4"
+                                                            Padding="5,2"
+                                                            Margin="6"
+                                                            HorizontalAlignment="Left"
+                                                            VerticalAlignment="Top">
+                                                        <TextBlock Text="{Binding TypeDisplay}"
+                                                                   FontSize="10"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="#cbd5e1" />
+                                                    </Border>
+                                                    <!-- Score Badge (Top-Right) -->
+                                                    <Border Background="#ccf59e0b"
+                                                            CornerRadius="4"
+                                                            Padding="6,2"
+                                                            Margin="6"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            IsVisible="{Binding ScoreDisplay, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                        <TextBlock Text="{Binding ScoreDisplay}"
+                                                                   FontSize="10"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="Black" />
+                                                    </Border>
+                                                </Grid>
+
+                                                <!-- Card Info and Action -->
+                                                <Grid Grid.Row="1" Margin="12,10" RowDefinitions="Auto,Auto,Auto,Auto,*">
+                                                    <TextBlock Grid.Row="0"
+                                                               Text="{Binding Title}"
+                                                               FontSize="13"
+                                                               FontWeight="SemiBold"
+                                                               MaxLines="2"
+                                                               TextWrapping="Wrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Foreground="{StaticResource AppTextPrimaryBrush}" />
+
+                                                    <TextBlock Grid.Row="1"
+                                                               Text="{Binding EnglishTitle}"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               IsVisible="{Binding EnglishTitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                               Margin="0,2,0,0" />
+
+                                                    <TextBlock Grid.Row="2"
+                                                               Text="{Binding ProgressDisplay}"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource AppTextSecondaryBrush}"
+                                                               Margin="0,4,0,0" />
+
+                                                    <TextBlock Grid.Row="3"
+                                                               Text="{Binding GenresDisplay}"
+                                                               FontSize="10"
+                                                               Foreground="{StaticResource AppAccentHoverBrush}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               IsVisible="{Binding GenresDisplay, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                               Margin="0,2,0,4" />
+
+                                                    <!-- Action Button / Library Badge -->
+                                                    <Panel Grid.Row="4" Margin="0,4,0,0">
+                                                        <!-- Already in library badge -->
+                                                        <Border Background="#1b2e23"
+                                                                BorderBrush="#22c55e"
+                                                                BorderThickness="1"
+                                                                CornerRadius="6"
+                                                                Padding="8,6"
+                                                                HorizontalAlignment="Stretch"
+                                                                IsVisible="{Binding IsInLibrary}">
+                                                            <TextBlock Text="✓ In Library"
+                                                                       FontSize="12"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="#86efac"
+                                                                       HorizontalAlignment="Center" />
+                                                        </Border>
+
+                                                        <!-- Add to Library Button -->
+                                                        <Button Content="+ Add to Library"
+                                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).AddCatalogSearchResultToLibraryCommand}"
+                                                                CommandParameter="{Binding}"
+                                                                Background="{StaticResource AppAccentBrush}"
+                                                                Foreground="White"
+                                                                FontWeight="SemiBold"
+                                                                FontSize="12"
+                                                                Padding="10,6"
+                                                                CornerRadius="6"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Center"
+                                                                IsVisible="{Binding !IsInLibrary}" />
+                                                    </Panel>
+                                                </Grid>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </Grid>
                     </ScrollViewer>
                 </Grid>
+            </Grid>
+        </Grid>
 
                 <!-- 3. Settings & Backup Section -->
                 <ScrollViewer IsVisible="{Binding IsSettingsAndBackupSection}"

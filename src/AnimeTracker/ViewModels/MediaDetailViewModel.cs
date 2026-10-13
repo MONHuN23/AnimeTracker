@@ -32,12 +32,16 @@ public partial class MediaDetailViewModel : ViewModelBase
     private string _title;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRewatch))]
+    [NotifyCanExecuteChangedFor(nameof(StartRewatchCommand))]
     private MediaStatus _status;
 
     [ObservableProperty]
-    private int _currentProgress;
+    [NotifyPropertyChangedFor(nameof(ProgressDisplay))]
+    private int? _currentProgress;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressDisplay))]
     private int? _totalProgress;
 
     [ObservableProperty]
@@ -96,10 +100,16 @@ public partial class MediaDetailViewModel : ViewModelBase
 
     public string TypeDisplay => Type.ToString().ToUpperInvariant();
 
-    public string ProgressDisplay =>
-        Type == MediaType.Anime
-            ? (TotalProgress.HasValue ? $"EP {CurrentProgress} / {TotalProgress}" : $"EP {CurrentProgress}")
-            : (TotalProgress.HasValue ? $"CH {CurrentProgress} / {TotalProgress}" : $"CH {CurrentProgress}");
+    public string ProgressDisplay
+    {
+        get
+        {
+            var cur = CurrentProgress ?? 0;
+            return Type == MediaType.Anime
+                ? (TotalProgress.HasValue ? $"EP {cur} / {TotalProgress}" : $"EP {cur}")
+                : (TotalProgress.HasValue ? $"CH {cur} / {TotalProgress}" : $"CH {cur}");
+        }
+    }
 
     public MediaDetailViewModel(
         MediaItem item,
@@ -146,21 +156,6 @@ public partial class MediaDetailViewModel : ViewModelBase
                 MediaStatus.Dropped
             };
         }
-    }
-
-    partial void OnStatusChanged(MediaStatus value)
-    {
-        OnPropertyChanged(nameof(CanRewatch));
-    }
-
-    partial void OnCurrentProgressChanged(int value)
-    {
-        OnPropertyChanged(nameof(ProgressDisplay));
-    }
-
-    partial void OnTotalProgressChanged(int? value)
-    {
-        OnPropertyChanged(nameof(ProgressDisplay));
     }
 
     public void LoadCoverImage()
@@ -253,15 +248,17 @@ public partial class MediaDetailViewModel : ViewModelBase
             return false;
         }
 
-        if (CurrentProgress < 0)
+        var effectiveProgress = CurrentProgress ?? 0;
+
+        if (effectiveProgress < 0)
         {
             ErrorMessage = "Progress cannot be negative.";
             return false;
         }
 
-        if (TotalProgress.HasValue && CurrentProgress > TotalProgress.Value)
+        if (TotalProgress.HasValue && effectiveProgress > TotalProgress.Value)
         {
-            ErrorMessage = $"Current progress ({CurrentProgress}) cannot exceed total progress ({TotalProgress.Value}).";
+            ErrorMessage = $"Current progress ({effectiveProgress}) cannot exceed total progress ({TotalProgress.Value}).";
             return false;
         }
 
@@ -271,9 +268,9 @@ public partial class MediaDetailViewModel : ViewModelBase
             return false;
         }
 
-        if (TotalProgress.HasValue && TotalProgress.Value < CurrentProgress)
+        if (TotalProgress.HasValue && TotalProgress.Value < effectiveProgress)
         {
-            ErrorMessage = $"Total progress ({TotalProgress.Value}) cannot be less than current progress ({CurrentProgress}).";
+            ErrorMessage = $"Total progress ({TotalProgress.Value}) cannot be less than current progress ({effectiveProgress}).";
             return false;
         }
 
@@ -287,6 +284,11 @@ public partial class MediaDetailViewModel : ViewModelBase
         {
             ErrorMessage = "Watching / Plan to Watch statuses are not valid for Manga or Manhwa.";
             return false;
+        }
+
+        if (TotalProgress.HasValue && TotalProgress.Value > 0 && effectiveProgress >= TotalProgress.Value)
+        {
+            Status = MediaStatus.Completed;
         }
 
         string? previousCoverToDelete = null;
@@ -322,7 +324,8 @@ public partial class MediaDetailViewModel : ViewModelBase
 
         Item.Title = Title.Trim();
         Item.Status = Status;
-        Item.CurrentProgress = CurrentProgress;
+        Item.CurrentProgress = effectiveProgress;
+        CurrentProgress = effectiveProgress;
         Item.Score = Score;
         Item.TotalProgress = TotalProgress;
         Item.Genres = string.IsNullOrWhiteSpace(Genres) ? null : Genres.Trim();
@@ -370,10 +373,10 @@ public partial class MediaDetailViewModel : ViewModelBase
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRewatch))]
     public async Task StartRewatchAsync()
     {
-        if (Status != MediaStatus.Completed)
+        if (!CanRewatch)
         {
             ErrorMessage = "Cannot start rewatch/reread on a title that is not Completed.";
             return;

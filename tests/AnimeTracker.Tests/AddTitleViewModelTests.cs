@@ -504,4 +504,56 @@ public class AddTitleViewModelTests : IDisposable
             if (File.Exists(tempImageFile)) File.Delete(tempImageFile);
         }
     }
+
+    [Fact]
+    public void SettingManualCoverPreview_NotifiesHasManualCover()
+    {
+        var client = CreateTestJikanClient("{\"data\":[]}");
+        var vm = new AddTitleViewModel(_repository, client);
+
+        var notified = false;
+        vm.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(AddTitleViewModel.HasManualCover))
+            {
+                notified = true;
+            }
+        };
+
+        Assert.False(vm.HasManualCover);
+
+        // Assigning a non-null bitmap preview
+        var dummyBitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(new Avalonia.PixelSize(1, 1));
+        vm.ManualCoverPreview = dummyBitmap;
+
+        Assert.True(notified);
+        Assert.True(vm.HasManualCover);
+
+        notified = false;
+        vm.ManualCoverPreview = null;
+
+        Assert.True(notified);
+        Assert.False(vm.HasManualCover);
+    }
+
+    [Fact]
+    public async Task ManualCurrentProgress_CanBeNull_AndDefaultsToZeroOnAdd()
+    {
+        var vm = new AddTitleViewModel(_repository, CreateTestJikanClient("{\"data\":[]}"));
+        vm.ManualTitle = "Custom Novel";
+        vm.ManualMediaType = MediaType.Manga;
+        vm.ManualTotalProgress = 50;
+
+        // User clears the starting progress field:
+        vm.ManualCurrentProgress = null;
+        Assert.Null(vm.ManualCurrentProgress);
+
+        var added = await vm.AddManualTitleAsync();
+        Assert.True(added);
+
+        var items = await _repository.GetAllAsync();
+        var item = items.Single(x => x.Title == "Custom Novel");
+        Assert.Equal(0, item.CurrentProgress);
+        Assert.Equal(MediaStatus.PlanToRead, item.Status);
+    }
 }

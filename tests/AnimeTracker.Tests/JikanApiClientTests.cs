@@ -352,4 +352,117 @@ public class JikanApiClientTests
         Assert.NotEmpty(mangaResults);
         Assert.Contains(mangaResults, x => x.Title.Contains("Solo Leveling", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public async Task GetRecommendationsByGenreAsync_UsesGenreId_WhenKnown()
+    {
+        var handler = new TestHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var client = new JikanApiClient(httpClient);
+
+        await client.GetRecommendationsByGenreAsync("anime", "Action");
+
+        Assert.Equal(1, handler.RequestCount);
+        Assert.NotNull(handler.LastRequest);
+        Assert.Contains("anime?genres=1&order_by=score&sort=desc", handler.LastRequest.RequestUri?.PathAndQuery);
+    }
+
+    [Fact]
+    public async Task GetRecommendationsByGenreAsync_FallsBackToQuery_WhenGenreUnknown()
+    {
+        var handler = new TestHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var client = new JikanApiClient(httpClient);
+
+        await client.GetRecommendationsByGenreAsync("anime", "CustomGenreXYZ");
+
+        Assert.Equal(1, handler.RequestCount);
+        Assert.NotNull(handler.LastRequest);
+        Assert.Contains("anime?q=CustomGenreXYZ&order_by=score&sort=desc", handler.LastRequest.RequestUri?.PathAndQuery);
+    }
+
+    [Fact]
+    public async Task GetRecommendationsByGenreAsync_CachesResults_WithinDuration()
+    {
+        var handler = new TestHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var client = new JikanApiClient(httpClient);
+
+        var first = await client.GetRecommendationsByGenreAsync("anime", "Action");
+        var second = await client.GetRecommendationsByGenreAsync("anime", "Action");
+
+        Assert.Equal(1, handler.RequestCount); // Second call must use cache
+        Assert.Same(first, second);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task GetRecommendationsByGenreAsync_WhenEmptyOrWhitespace_ReturnsEmptyList(string? genre)
+    {
+        var handler = new TestHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var client = new JikanApiClient(httpClient);
+
+        var result = await client.GetRecommendationsByGenreAsync("anime", genre!);
+
+        Assert.Empty(result);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task GetRecommendationsByGenreAsync_When429_ThrowsJikanApiExceptionWithRateLimit()
+    {
+        var handler = new TestHttpMessageHandler
+        {
+            ResponseFactory = _ => new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+        };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var client = new JikanApiClient(httpClient);
+
+        var ex = await Assert.ThrowsAsync<JikanApiException>(() => client.GetRecommendationsByGenreAsync("anime", "Fantasy"));
+        Assert.True(ex.IsRateLimited);
+        Assert.Equal(HttpStatusCode.TooManyRequests, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetRecommendationsByGenreAsync_SeparatesMangaAndManhwa_InJikanQueryAndCache()
+    {
+        var handler = new TestHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var client = new JikanApiClient(httpClient);
+
+        await client.GetRecommendationsByGenreAsync("manga", "Action");
+        var mangaUrl = handler.LastRequest?.RequestUri?.PathAndQuery;
+
+        await client.GetRecommendationsByGenreAsync("manhwa", "Action");
+        var manhwaUrl = handler.LastRequest?.RequestUri?.PathAndQuery;
+
+        Assert.Equal(2, handler.RequestCount); // Must not hit each other's cache
+        Assert.NotNull(mangaUrl);
+        Assert.NotNull(manhwaUrl);
+        Assert.Contains("type=manga", mangaUrl);
+        Assert.Contains("type=manhwa", manhwaUrl);
+    }
+
+    [Fact]
+    public async Task GetRecommendationsByGenreAsync_Kitsu_UsesSubtypeFilters()
+    {
+        var kitsuHandler = new TestHttpMessageHandler();
+        var kitsuHttpClient = new HttpClient(kitsuHandler) { BaseAddress = new Uri("https://kitsu.io/api/edge/") };
+        var client = new JikanApiClient(null, kitsuHttpClient);
+
+        await client.GetRecommendationsByGenreAsync("manhwa", "Action");
+        var manhwaUrl = kitsuHandler.LastRequest?.RequestUri?.PathAndQuery;
+
+        await client.GetRecommendationsByGenreAsync("manga", "Action");
+        var mangaUrl = kitsuHandler.LastRequest?.RequestUri?.PathAndQuery;
+
+        Assert.Equal(2, kitsuHandler.RequestCount);
+        Assert.NotNull(manhwaUrl);
+        Assert.NotNull(mangaUrl);
+        Assert.Contains("filter[subtype]=manhwa", manhwaUrl);
+        Assert.Contains("filter[subtype]=manga", mangaUrl);
+    }
 }

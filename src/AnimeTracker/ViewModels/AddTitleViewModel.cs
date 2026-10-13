@@ -60,7 +60,7 @@ public partial class AddTitleViewModel : ViewModelBase
     private MediaType _manualMediaType = MediaType.Anime;
 
     [ObservableProperty]
-    private int _manualCurrentProgress = 0;
+    private int? _manualCurrentProgress = 0;
 
     [ObservableProperty]
     private int? _manualTotalProgress;
@@ -75,6 +75,7 @@ public partial class AddTitleViewModel : ViewModelBase
     private string? _manualCoverFilePath;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasManualCover))]
     private Bitmap? _manualCoverPreview;
 
     [ObservableProperty]
@@ -164,6 +165,7 @@ public partial class AddTitleViewModel : ViewModelBase
             SearchResults.Clear();
             foreach (var r in results)
             {
+                r.LoadCoverImage();
                 SearchResults.Add(r);
             }
         }
@@ -262,7 +264,6 @@ public partial class AddTitleViewModel : ViewModelBase
     {
         ManualCoverFilePath = null;
         ManualCoverPreview = null;
-        OnPropertyChanged(nameof(HasManualCover));
     }
 
     public void SetSelectedCoverFile(string path)
@@ -289,7 +290,6 @@ public partial class AddTitleViewModel : ViewModelBase
         ManualCoverFilePath = path;
         ManualCoverPreview = bitmap;
         ManualErrorMessage = null;
-        OnPropertyChanged(nameof(HasManualCover));
     }
 
     [RelayCommand]
@@ -303,19 +303,21 @@ public partial class AddTitleViewModel : ViewModelBase
             return false;
         }
 
+        var effectiveProgress = ManualCurrentProgress ?? 0;
+
         if (ManualTotalProgress.HasValue && ManualTotalProgress.Value < 0)
         {
             ManualErrorMessage = "Total progress cannot be negative.";
             return false;
         }
 
-        if (ManualCurrentProgress < 0)
+        if (effectiveProgress < 0)
         {
             ManualErrorMessage = "Progress cannot be negative.";
             return false;
         }
 
-        if (ManualTotalProgress.HasValue && ManualCurrentProgress > ManualTotalProgress.Value)
+        if (ManualTotalProgress.HasValue && effectiveProgress > ManualTotalProgress.Value)
         {
             ManualErrorMessage = "Progress cannot exceed total progress.";
             return false;
@@ -331,9 +333,14 @@ public partial class AddTitleViewModel : ViewModelBase
             return false;
         }
 
-        var initialStatus = ManualCurrentProgress > 0
+        var initialStatus = effectiveProgress > 0
             ? (ManualMediaType == MediaType.Anime ? MediaStatus.Watching : MediaStatus.Reading)
             : (ManualMediaType == MediaType.Anime ? MediaStatus.PlanToWatch : MediaStatus.PlanToRead);
+
+        if (ManualTotalProgress.HasValue && ManualTotalProgress.Value > 0 && effectiveProgress >= ManualTotalProgress.Value)
+        {
+            initialStatus = MediaStatus.Completed;
+        }
 
         string? savedCoverPath = null;
         if (!string.IsNullOrWhiteSpace(ManualCoverFilePath))
@@ -356,7 +363,7 @@ public partial class AddTitleViewModel : ViewModelBase
             Title = ManualTitle.Trim(),
             Type = ManualMediaType,
             Status = initialStatus,
-            CurrentProgress = ManualCurrentProgress,
+            CurrentProgress = effectiveProgress,
             TotalProgress = ManualTotalProgress,
             CoverImagePath = savedCoverPath,
             Genres = string.IsNullOrWhiteSpace(ManualGenres) ? null : ManualGenres.Trim(),
