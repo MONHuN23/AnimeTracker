@@ -25,7 +25,7 @@ Főbb funkciók:
 - **MVVM minta:** `CommunityToolkit.Mvvm` 8.4.2 (Source generált `[ObservableProperty]`, `[RelayCommand]`)
 - **Adattárolás:** Helyi SQLite adatbázis (`Microsoft.Data.Sqlite` 10.0.12, Dapper 2.1.89 micro-ORM; **EF Core szigorúan kizárva**)
 - **Külső API:** Jikan API v4 REST kliens (`System.Net.Http.HttpClient` és `System.Text.Json`), Kitsu fallback
-- **Tesztelés:** xUnit 2.9.3 automatizált tesztcsomag (197 lefutó teszt, szigorú TDD)
+- **Tesztelés:** xUnit 2.9.3 automatizált tesztcsomag (202 lefutó teszt, szigorú TDD)
 
 ### 1.3. Fő könyvtárak és felelősségek
 ```text
@@ -39,7 +39,7 @@ AnimeTracker/
 │   │   └── Jikan/                  # Jikan v4 REST API hívások, hibakezelés és DTO leképezés
 │   ├── ViewModels/                 # MVVM ViewModel réteg (állapotok, parancsok, szűrések)
 │   └── Views/                      # Avalonia XAML nézetek, ablakok és stílusok
-└── tests/AnimeTracker.Tests/       # Automatizált xUnit tesztek (148 egység- és integrációs teszt)
+└── tests/AnimeTracker.Tests/       # Automatizált xUnit tesztek (202 egység- és integrációs teszt)
 ```
 
 ### 1.4. Parancsok (Futtatás, Tesztelés, Build)
@@ -126,8 +126,12 @@ AnimeTracker/
    - Tényszerű indoklás generálása (pl. *"Matches your highly rated genres: Action, Fantasy"*).
 5. **Közvetlen könyvtárhoz adás (`+ Add to Library`):**
    - A felhasználó az ajánlókártyán lévő gombbal azonnal felveheti a címet `PlanToWatch` vagy `PlanToRead` státuszban.
-   - A cím bekerül az SQLite adatbázisba, frissülnek a könyvtári számlálók, és a tétel azonnal eltűnik az aktív ajánlások közül.
+   - A cím bekerül az SQLite adatbázisba, frissülnek a könyvtári számlálók, és a tétel azonnal eltűnik az aktív ajánlások közül (vagy keresési találat esetén átvált `✓ In Library` állapotjelzésre).
    - A meglévő szinkron backlog-ajánló (`GetRecommendations`) a háttérben azonnali átmenetet és kompatibilitást biztosít.
+6. **Modern Discovery Hub UI integráció:**
+   - **Kapszula navigáció (Discovery Pills):** `[For You]` (személyre szabott ízlésprofil), `[Popular]` (globális népszerűségi lista a `GetPopularRecommendationsAsync` és `JikanApiClient.GetPopularAsync` hívásokkal), valamint `[Anime]`, `[Manga]`, `[Manhwa]` típus szerinti szűrések.
+   - **Integrált katalóguskereső:** A fejlécben elhelyezett keresősávval azonnali valós idejű Jikan keresés indítható. A keresőmező törlésekor vagy a `✕` gombra kattintva a felület zökkenőmentesen visszavált az ajánlási nézetre.
+   - **Szűrőmenü:** `🎛️` gomb flyout menüvel a műfajválasztáshoz és manuális frissítéshez.
 
 ### 2.6. Adatfolyam: Biztonsági mentés (JSON Export és Import)
 1. **Export:**

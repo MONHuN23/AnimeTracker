@@ -20,6 +20,7 @@ public partial class RecommendationCardViewModel : ViewModelBase
     public string? CoverImagePath => Item.CoverImagePath;
     public string? Genres => Item.Genres;
     public string Reason => Recommendation.Reason;
+    public string ReasonDisplay => Reason;
     public double MatchScore => Recommendation.MatchScore;
     public string MatchScoreDisplay => $"★ Score {MatchScore:F0}";
     public int? TotalProgress => Item.TotalProgress;
@@ -32,6 +33,7 @@ public partial class RecommendationCardViewModel : ViewModelBase
     public bool IsInLibrary => Id > 0;
     public double? ExternalScore => Recommendation.ExternalScore;
     public string? ExternalScoreDisplay => ExternalScore.HasValue ? $"★ {ExternalScore.Value:F1}" : null;
+    public string? ScoreDisplay => ExternalScoreDisplay ?? MatchScoreDisplay;
     public string? Synopsis => Item.Synopsis;
     public int? ReleaseYear => Item.ReleaseYear;
 

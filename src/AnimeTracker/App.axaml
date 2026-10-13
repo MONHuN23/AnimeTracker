@@ -7,15 +7,15 @@
     </Application.Styles>
 
     <Application.Resources>
-        <!-- Dark graphite and purple accent palette -->
-        <Color x:Key="AppBackground">#141418</Color>
-        <Color x:Key="AppSurface">#1c1c24</Color>
-        <Color x:Key="AppSurfaceHover">#262632</Color>
-        <Color x:Key="AppBorder">#2e2e3e</Color>
-        <Color x:Key="AppAccent">#8b5cf6</Color>
-        <Color x:Key="AppAccentHover">#a78bfa</Color>
-        <Color x:Key="AppTextPrimary">#f3f4f6</Color>
-        <Color x:Key="AppTextSecondary">#9ca3af</Color>
+        <!-- Dark graphite and purple accent palette matching modern discovery reference -->
+        <Color x:Key="AppBackground">#17171D</Color>
+        <Color x:Key="AppSurface">#1D1D26</Color>
+        <Color x:Key="AppSurfaceHover">#272733</Color>
+        <Color x:Key="AppBorder">#34323F</Color>
+        <Color x:Key="AppAccent">#8B5CF6</Color>
+        <Color x:Key="AppAccentHover">#A78BFA</Color>
+        <Color x:Key="AppTextPrimary">#F3F4F6</Color>
+        <Color x:Key="AppTextSecondary">#9DA3AF</Color>
 
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppBackground}" />
         <SolidColorBrush x:Key="AppSurfaceBrush" Color="{StaticResource AppSurface}" />

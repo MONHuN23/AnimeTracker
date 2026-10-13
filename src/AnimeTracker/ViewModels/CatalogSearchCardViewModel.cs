@@ -28,6 +28,9 @@ public partial class CatalogSearchCardViewModel : ViewModelBase
 
     public string TypeDisplay => Type.ToString().ToUpperInvariant();
     public string? ScoreDisplay => Score.HasValue ? $"★ {Score.Value:F1}" : null;
+    public string ReasonDisplay => Genres.Count > 0
+        ? $"Genres: {string.Join(", ", System.Linq.Enumerable.Take(Genres, 3))}"
+        : (ReleaseYear.HasValue ? $"Released {ReleaseYear.Value}" : string.Empty);
     public string ProgressDisplay =>
         Type == MediaType.Anime
             ? (TotalProgress.HasValue ? $"{TotalProgress} Episodes" : "Episodes unknown")

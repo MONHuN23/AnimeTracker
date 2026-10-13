@@ -267,6 +267,89 @@ public class MainWindowViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task SelectDiscoveryPillCommand_SwitchesPillAndFilters()
+    {
+        var vm = new MainWindowViewModel(_repository);
+        Assert.Equal(DiscoveryPill.ForYou, vm.SelectedDiscoveryPill);
+        Assert.True(vm.IsForYouPillActive);
+        Assert.False(vm.IsPopularPillActive);
+
+        await vm.SelectDiscoveryPillCommand.ExecuteAsync(DiscoveryPill.Popular);
+        Assert.Equal(DiscoveryPill.Popular, vm.SelectedDiscoveryPill);
+        Assert.True(vm.IsPopularPillActive);
+        Assert.False(vm.IsForYouPillActive);
+
+        await vm.SelectDiscoveryPillCommand.ExecuteAsync(DiscoveryPill.Anime);
+        Assert.Equal(DiscoveryPill.Anime, vm.SelectedDiscoveryPill);
+        Assert.Equal(MediaTypeFilter.Anime, vm.SelectedMediaTypeFilter);
+        Assert.True(vm.IsAnimePillActive);
+
+        await vm.SelectDiscoveryPillCommand.ExecuteAsync(DiscoveryPill.Manga);
+        Assert.Equal(DiscoveryPill.Manga, vm.SelectedDiscoveryPill);
+        Assert.Equal(MediaTypeFilter.Manga, vm.SelectedMediaTypeFilter);
+        Assert.True(vm.IsMangaPillActive);
+
+        await vm.SelectDiscoveryPillCommand.ExecuteAsync(DiscoveryPill.Manhwa);
+        Assert.Equal(DiscoveryPill.Manhwa, vm.SelectedDiscoveryPill);
+        Assert.Equal(MediaTypeFilter.Manhwa, vm.SelectedMediaTypeFilter);
+        Assert.True(vm.IsManhwaPillActive);
+    }
+
+    [Fact]
+    public void ClearCatalogSearchCommand_ClearsQuery_AndRestoresRecommendationsView()
+    {
+        var vm = new MainWindowViewModel(_repository);
+        vm.CatalogSearchQuery = "Frieren";
+        Assert.True(vm.IsShowingSearchResults);
+        Assert.True(vm.HasCatalogSearchQuery);
+
+        vm.ClearCatalogSearchCommand.Execute(null);
+        Assert.Equal(string.Empty, vm.CatalogSearchQuery);
+        Assert.False(vm.IsShowingSearchResults);
+        Assert.False(vm.HasCatalogSearchQuery);
+    }
+
+    [Fact]
+    public async Task DiscoverySectionTitleAndSubtitle_ReflectActiveState()
+    {
+        var vm = new MainWindowViewModel(_repository);
+        Assert.Equal("Recommended for you", vm.DiscoverySectionTitle);
+        Assert.Equal("Based on your highly rated titles", vm.DiscoverySectionSubtitle);
+
+        await vm.SelectDiscoveryPillCommand.ExecuteAsync(DiscoveryPill.Popular);
+        Assert.Equal("Popular titles", vm.DiscoverySectionTitle);
+        Assert.Equal("Trending & community favorites", vm.DiscoverySectionSubtitle);
+
+        vm.CatalogSearchQuery = "Solo Leveling";
+        Assert.Equal("Search results for \"Solo Leveling\"", vm.DiscoverySectionTitle);
+    }
+
+    [Fact]
+    public async Task DynamicDiscovery_TransitionsCorrectly_BetweenRecommendationsAndSearch()
+    {
+        var vm = new MainWindowViewModel(_repository);
+        vm.SelectSection(NavigationSection.Recommendations);
+        Assert.True(vm.IsRecommendationsSection);
+        Assert.False(vm.IsShowingSearchResults);
+        Assert.Equal("Recommended for you", vm.DiscoverySectionTitle);
+
+        // When user enters a search query
+        vm.CatalogSearchQuery = "Attack on Titan";
+        Assert.True(vm.IsShowingSearchResults);
+        Assert.Equal("Search results for \"Attack on Titan\"", vm.DiscoverySectionTitle);
+
+        // When search is cleared
+        vm.ClearCatalogSearchCommand.Execute(null);
+        Assert.False(vm.IsShowingSearchResults);
+        Assert.Equal("Recommended for you", vm.DiscoverySectionTitle);
+
+        // When switching pill
+        await vm.SelectDiscoveryPillCommand.ExecuteAsync(DiscoveryPill.Popular);
+        Assert.Equal("Popular titles", vm.DiscoverySectionTitle);
+        Assert.Equal("Trending & community favorites", vm.DiscoverySectionSubtitle);
+    }
+
+    [Fact]
     public async Task ShowRecommendationSuccess_SetsMessage_AndAutoDismissesAfterDelay()
     {
         var vm = new MainWindowViewModel(_repository);

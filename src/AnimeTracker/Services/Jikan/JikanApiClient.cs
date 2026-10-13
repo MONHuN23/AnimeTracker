@@ -302,6 +302,40 @@ public class JikanApiClient
         return results;
     }
 
+    public async Task<IReadOnlyList<JikanSearchResult>> GetPopularAsync(
+        string malType,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var normalizedType = malType?.Trim().ToLowerInvariant() switch
+        {
+            "manhwa" => "manhwa",
+            "anime" => "anime",
+            _ => "manga"
+        };
+        var cacheKey = $"{normalizedType}:__popular__";
+
+        if (_genreCache.TryGetValue(cacheKey, out var cached) && (DateTime.UtcNow - cached.Timestamp) < CacheDuration)
+        {
+            return cached.Items;
+        }
+
+        IReadOnlyList<JikanSearchResult> results;
+
+        if (!_isCustomClient || _jikanOffline)
+        {
+            results = await GetKitsuPopularAsync(normalizedType, cancellationToken);
+        }
+        else
+        {
+            results = await GetJikanPopularAsync(normalizedType, cancellationToken);
+        }
+
+        _genreCache[cacheKey] = (DateTime.UtcNow, results);
+        return results;
+    }
+
     private async Task<IReadOnlyList<JikanSearchResult>> GetJikanRecommendationsByGenreAsync(
         string malType,
         string genre,
@@ -385,6 +419,80 @@ public class JikanApiClient
         }
     }
 
+    private async Task<IReadOnlyList<JikanSearchResult>> GetJikanPopularAsync(
+        string malType,
+        CancellationToken cancellationToken)
+    {
+        malType = malType ?? "manga";
+        var isAnime = string.Equals(malType, "anime", StringComparison.OrdinalIgnoreCase);
+        var endpoint = isAnime ? "anime" : "manga";
+        var typeParam = malType.Trim().ToLowerInvariant() switch
+        {
+            "manhwa" => "&type=manhwa",
+            "manga" => "&type=manga",
+            _ => string.Empty
+        };
+
+        var relativeUrl = $"{endpoint}?order_by=popularity&sort=asc{typeParam}&limit=25";
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync(relativeUrl, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _jikanOffline = true;
+            try
+            {
+                return await GetKitsuPopularAsync(malType, cancellationToken);
+            }
+            catch
+            {
+                throw new JikanApiException($"Network error while calling Jikan API ({malType}): {ex.Message}", innerException: ex);
+            }
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                throw new JikanApiException("Jikan API rate limit reached (HTTP 429).", HttpStatusCode.TooManyRequests);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new JikanApiException($"Jikan API returned error status: {response.StatusCode}", response.StatusCode);
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            try
+            {
+                using var doc = JsonDocument.Parse(content);
+                if (!doc.RootElement.TryGetProperty("data", out var dataElement) || dataElement.ValueKind != JsonValueKind.Array)
+                {
+                    return Array.Empty<JikanSearchResult>();
+                }
+
+                var list = new List<JikanSearchResult>();
+                foreach (var item in dataElement.EnumerateArray())
+                {
+                    list.Add(ParseJikanItem(item, malType));
+                }
+
+                return list;
+            }
+            catch (JsonException ex)
+            {
+                throw new JikanApiException($"Failed to parse Jikan API response JSON: {ex.Message}", response.StatusCode, ex);
+            }
+        }
+    }
+
     private async Task<IReadOnlyList<JikanSearchResult>> GetKitsuRecommendationsByGenreAsync(
         string malType,
         string genre,
@@ -400,6 +508,91 @@ public class JikanApiClient
             _ => string.Empty
         };
         var relativeUrl = $"{endpoint}?filter[categories]={Uri.EscapeDataString(genre)}{subtypeFilter}&sort=-averageRating&page[limit]=20&include=categories";
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _kitsuClient.GetAsync(relativeUrl, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new JikanApiException($"Network error while calling catalog API ({malType}): {ex.Message}", innerException: ex);
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new JikanApiException($"Catalog API returned error status: {response.StatusCode}", response.StatusCode);
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            try
+            {
+                using var doc = JsonDocument.Parse(content);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("data", out var dataElement) || dataElement.ValueKind != JsonValueKind.Array)
+                {
+                    return Array.Empty<JikanSearchResult>();
+                }
+
+                var categoriesById = new Dictionary<string, string>();
+                if (root.TryGetProperty("included", out var includedElement) && includedElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var inc in includedElement.EnumerateArray())
+                    {
+                        if (inc.TryGetProperty("type", out var incType) && incType.GetString() == "categories" &&
+                            inc.TryGetProperty("id", out var incId) &&
+                            inc.TryGetProperty("attributes", out var incAttr) &&
+                            incAttr.TryGetProperty("title", out var incTitle))
+                        {
+                            var idStr = incId.GetString();
+                            var titleStr = incTitle.GetString();
+                            if (!string.IsNullOrEmpty(idStr) && !string.IsNullOrEmpty(titleStr))
+                            {
+                                categoriesById[idStr] = titleStr;
+                            }
+                        }
+                    }
+                }
+
+                var list = new List<JikanSearchResult>();
+                foreach (var item in dataElement.EnumerateArray())
+                {
+                    var parsed = ParseKitsuItem(item, malType, categoriesById);
+                    if (parsed != null)
+                    {
+                        list.Add(parsed);
+                    }
+                }
+
+                return list;
+            }
+            catch (JsonException ex)
+            {
+                throw new JikanApiException($"Failed to parse catalog API response JSON: {ex.Message}", response.StatusCode, ex);
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<JikanSearchResult>> GetKitsuPopularAsync(
+        string malType,
+        CancellationToken cancellationToken)
+    {
+        malType = malType ?? "manga";
+        var isAnime = string.Equals(malType, "anime", StringComparison.OrdinalIgnoreCase);
+        var endpoint = isAnime ? "anime" : "manga";
+        var subtypeFilter = malType.Trim().ToLowerInvariant() switch
+        {
+            "manhwa" => "&filter[subtype]=manhwa",
+            "manga" => "&filter[subtype]=manga",
+            _ => string.Empty
+        };
+        var relativeUrl = $"{endpoint}?sort=-userCount{subtypeFilter}&page[limit]=20&include=categories";
 
         HttpResponseMessage response;
         try

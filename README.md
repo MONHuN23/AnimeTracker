@@ -3,27 +3,34 @@
 [![.NET 10](https://img.shields.io/badge/.NET-10.0%20LTS-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Avalonia UI](https://img.shields.io/badge/Avalonia%20UI-12.x-8430b5?logo=avalonia&logoColor=white)](https://avaloniaui.net/)
 [![SQLite](https://img.shields.io/badge/Database-SQLite%20%2B%20Dapper-003B57?logo=sqlite&logoColor=white)](https://sqlite.org/)
-[![Tests](https://img.shields.io/badge/Tests-148%20Passing-brightgreen)](https://xunit.net/)
+[![Tests](https://img.shields.io/badge/Tests-202%20Passing-brightgreen)](https://xunit.net/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**AnimeTracker** is a modern, lightweight, privacy-focused cross-platform desktop application designed to track your anime, manga, and manhwa progress. Built with **.NET 10 LTS** and **Avalonia UI 12**, it combines a clean graphite-purple dark theme with local-first SQLite storage, online metadata searching, and an intelligent backlog recommendation system.
+**AnimeTracker** is a modern, lightweight, privacy-focused cross-platform desktop application designed to track your anime, manga, and manhwa progress. Built with **.NET 10 LTS** and **Avalonia UI 12**, it combines a clean graphite-purple dark theme with local-first SQLite storage, online metadata searching, and a modern Discovery Hub with personalized recommendations.
 
 ---
 
 ## ✨ Features
 
 - 🎨 **Modern Dark Graphite Theme**
-  - Custom dark theme optimized for readability and long viewing sessions.
+  - Custom dark theme (`#17171D`, `#1D1D26`, `#34323F`, `#8B5CF6`) optimized for readability and long viewing sessions.
   - Responsive card grid displaying posters, status badges, progress steppers, and personal ratings.
   - Multi-tab navigation with dynamic counters for *All*, *Watching / Reading*, *Completed*, *On Hold*, *Dropped*, and *Plan to Watch / Read*.
 
+- 🌟 **Modern Discovery Experience (Discover Hub)**
+  - Unified discovery interface bringing together personalized taste-based recommendations, popular trending titles, and real-time catalog search.
+  - Integrated search bar with `🔍` icon, 400 ms debounce, and instant clear `✕` button returning directly to recommendations.
+  - Capsule navigation pills: `[For You]`, `[Popular]`, `[Anime]`, `[Manga]`, and `[Manhwa]`.
+  - Filter button with `🎛️` icon providing a quick flyout for genre selection and refreshing recommendations.
+  - Premium 2:3 vertical poster cards with top-left media type badges, top-right score badges, wrapped titles, match explanations, and `+ Add to Library` action buttons.
+
 - 🔍 **Jikan API v4 & Catalog Search**
-  - Real-time catalog search for Anime, Manga, and Manhwa using Jikan v4 (MyAnimeList data).
-  - Debounced input (400–500 ms) with request cancellation (`CancellationToken`) preventing race conditions.
-  - Resilient fallback support and duplicate detection by `(MalId, MalType)`.
+  - Real-time catalog search for Anime, Manga, and Manhwa using Jikan v4 (MyAnimeList data) and resilient Kitsu fallback.
+  - Debounced input (400 ms) with request cancellation (`CancellationToken`) preventing race conditions.
+  - Memory caching and duplicate detection by `(MalId, MalType)`.
 
 - ✍️ **Manual Entry & Custom Titles**
-  - Complete offline entry for titles not found in online catalogs or custom works.
+  - Dedicated offline entry for titles not found in online catalogs or custom works via the sidebar `+ Add Title` button.
   - Direct starting progress input that automatically sets status to *Watching* or *Reading* when progress > 0.
   - Custom total episode / chapter configuration, genres, and synopses.
 
@@ -35,13 +42,17 @@
 
 - 🔢 **Direct Progress Editing & Tracking**
   - Incremental progress buttons (`+` / `−`) directly on library cards for quick logging.
+  - Automatic transition to *Completed* status when progress reaches a known positive total count.
   - Full detail and edit modal with direct numeric input (e.g. Episode 1200) and media-specific units (*Episodes* for Anime, *Chapters* for Manga/Manhwa).
   - One-click *Mark as Completed* and *Start Rewatch / Reread* operations with automatic counter tracking.
 
-- 🎯 **Smart Backlog Recommendations**
+- 🎯 **Smart Backlog & Personalized Recommendations**
   - Intelligent heuristic engine that analyzes your favorite genres based on titles rated 8/10 or higher.
-  - Ranks unstarted backlog titles (*Plan to Watch* / *Plan to Read*) and generates clear explanations for why a title is recommended.
+  - Ranks candidate titles and generates clear explanations for why a title is recommended.
   - Filter recommendations by media type (Anime, Manga, Manhwa) and top preferred genres.
+
+- 🔔 **Auto-Dismissing Notifications**
+  - Polished green notification banners that automatically dismiss after ~3 seconds with cancellation token safety for overlapping notifications.
 
 - 💾 **Data Portability & Transactional Backups**
   - Full JSON export of your library.
@@ -58,8 +69,8 @@
 - **UI Framework:** [Avalonia UI](https://avaloniaui.net/) 12.x (Desktop XAML, MVVM)
 - **MVVM Toolkit:** `CommunityToolkit.Mvvm` (Source generators, ObservableProperty, RelayCommand)
 - **Data Access:** Local SQLite via `Microsoft.Data.Sqlite` + [Dapper](https://github.com/DapperLib/Dapper) micro-ORM (Strictly no heavy EF Core)
-- **External API:** Jikan API v4 via `System.Net.Http.HttpClient` & `System.Text.Json`
-- **Testing:** [xUnit](https://xunit.net/) with 148 automated unit and integration tests (TDD workflow)
+- **External API:** Jikan API v4 via `System.Net.Http.HttpClient` & `System.Text.Json` with Kitsu fallback
+- **Testing:** [xUnit](https://xunit.net/) with 202 automated unit and integration tests (TDD workflow)
 
 ### Architectural Design
 
@@ -77,7 +88,7 @@ AnimeTracker/
 │   │   └── RecommendationService.cs # Affinity scoring & backlog recommendation engine
 │   ├── ViewModels/            # MVVM ViewModels (MainWindow, Detail, AddTitle, Cards)
 │   └── Views/                 # Avalonia XAML Windows, Dialogs, Themes & Styles
-└── tests/AnimeTracker.Tests/  # Comprehensive xUnit test suite (148 tests)
+└── tests/AnimeTracker.Tests/  # Comprehensive xUnit test suite (202 tests)
 ```
 
 ---
@@ -114,7 +125,7 @@ To run the automated test suite:
 dotnet test
 ```
 
-All 148 tests run sequentially without external dependencies or live network access required.
+All 202 tests run sequentially without external dependencies or live network access required.
 
 ---
 

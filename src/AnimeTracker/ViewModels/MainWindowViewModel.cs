@@ -48,6 +48,15 @@ public enum DiscoveryTab
     Search
 }
 
+public enum DiscoveryPill
+{
+    ForYou,
+    Popular,
+    Anime,
+    Manga,
+    Manhwa
+}
+
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly List<MediaItem> _allItems = new();
@@ -130,12 +139,72 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool IsDiscoverySearchTab => SelectedDiscoveryTab == DiscoveryTab.Search;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsForYouPillActive))]
+    [NotifyPropertyChangedFor(nameof(IsPopularPillActive))]
+    [NotifyPropertyChangedFor(nameof(IsAnimePillActive))]
+    [NotifyPropertyChangedFor(nameof(IsMangaPillActive))]
+    [NotifyPropertyChangedFor(nameof(IsManhwaPillActive))]
+    [NotifyPropertyChangedFor(nameof(DiscoverySectionTitle))]
+    [NotifyPropertyChangedFor(nameof(DiscoverySectionSubtitle))]
+    private DiscoveryPill _selectedDiscoveryPill = DiscoveryPill.ForYou;
+
+    public bool IsForYouPillActive => SelectedDiscoveryPill == DiscoveryPill.ForYou;
+    public bool IsPopularPillActive => SelectedDiscoveryPill == DiscoveryPill.Popular;
+    public bool IsAnimePillActive => SelectedDiscoveryPill == DiscoveryPill.Anime;
+    public bool IsMangaPillActive => SelectedDiscoveryPill == DiscoveryPill.Manga;
+    public bool IsManhwaPillActive => SelectedDiscoveryPill == DiscoveryPill.Manhwa;
+
+    [ObservableProperty]
     private string _catalogSearchQuery = string.Empty;
+
+    public bool IsShowingSearchResults => !string.IsNullOrWhiteSpace(CatalogSearchQuery);
+    public bool HasCatalogSearchQuery => !string.IsNullOrWhiteSpace(CatalogSearchQuery);
+
+    public string DiscoverySectionTitle
+    {
+        get
+        {
+            if (IsShowingSearchResults)
+            {
+                return $"Search results for \"{CatalogSearchQuery}\"";
+            }
+            return SelectedDiscoveryPill switch
+            {
+                DiscoveryPill.Popular => "Popular titles",
+                DiscoveryPill.Anime => "Recommended anime",
+                DiscoveryPill.Manga => "Recommended manga",
+                DiscoveryPill.Manhwa => "Recommended manhwa",
+                _ => "Recommended for you"
+            };
+        }
+    }
+
+    public string DiscoverySectionSubtitle
+    {
+        get
+        {
+            if (IsShowingSearchResults)
+            {
+                return IsLoadingCatalogSearch
+                    ? "Searching catalog..."
+                    : $"Found {CatalogSearchResults.Count} titles in catalog";
+            }
+            return SelectedDiscoveryPill switch
+            {
+                DiscoveryPill.Popular => "Trending & community favorites",
+                DiscoveryPill.Anime => "Based on your anime taste & preferences",
+                DiscoveryPill.Manga => "Based on your manga taste & preferences",
+                DiscoveryPill.Manhwa => "Based on your manhwa taste & preferences",
+                _ => "Based on your highly rated titles"
+            };
+        }
+    }
 
     [ObservableProperty]
     private MediaType _catalogSearchMediaType = MediaType.Anime;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DiscoverySectionSubtitle))]
     private bool _isLoadingCatalogSearch;
 
     [ObservableProperty]
@@ -225,6 +294,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnCatalogSearchQueryChanged(string value)
     {
+        OnPropertyChanged(nameof(IsShowingSearchResults));
+        OnPropertyChanged(nameof(HasCatalogSearchQuery));
+        OnPropertyChanged(nameof(DiscoverySectionTitle));
+        OnPropertyChanged(nameof(DiscoverySectionSubtitle));
+
         _catalogSearchCts?.Cancel();
         _catalogSearchCts?.Dispose();
         _catalogSearchCts = new CancellationTokenSource();
@@ -410,11 +484,22 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            var result = await RecommendationService.GetExternalRecommendationsAsync(
-                _allItems,
-                SelectedMediaTypeFilter,
-                genreFilter,
-                token);
+            RecommendationResult result;
+            if (SelectedDiscoveryPill == DiscoveryPill.Popular)
+            {
+                result = await RecommendationService.GetPopularRecommendationsAsync(
+                    _allItems,
+                    SelectedMediaTypeFilter,
+                    token);
+            }
+            else
+            {
+                result = await RecommendationService.GetExternalRecommendationsAsync(
+                    _allItems,
+                    SelectedMediaTypeFilter,
+                    genreFilter,
+                    token);
+            }
 
             if (token.IsCancellationRequested) return;
 
@@ -540,6 +625,51 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void ClearCatalogSearch()
+    {
+        CatalogSearchQuery = string.Empty;
+    }
+
+    [RelayCommand]
+    public async Task SelectDiscoveryPillAsync(DiscoveryPill pill)
+    {
+        SelectedDiscoveryPill = pill;
+
+        switch (pill)
+        {
+            case DiscoveryPill.ForYou:
+                SelectedMediaTypeFilter = MediaTypeFilter.All;
+                CatalogSearchMediaType = MediaType.Anime;
+                break;
+            case DiscoveryPill.Popular:
+                SelectedMediaTypeFilter = MediaTypeFilter.All;
+                CatalogSearchMediaType = MediaType.Anime;
+                break;
+            case DiscoveryPill.Anime:
+                SelectedMediaTypeFilter = MediaTypeFilter.Anime;
+                CatalogSearchMediaType = MediaType.Anime;
+                break;
+            case DiscoveryPill.Manga:
+                SelectedMediaTypeFilter = MediaTypeFilter.Manga;
+                CatalogSearchMediaType = MediaType.Manga;
+                break;
+            case DiscoveryPill.Manhwa:
+                SelectedMediaTypeFilter = MediaTypeFilter.Manhwa;
+                CatalogSearchMediaType = MediaType.Manhwa;
+                break;
+        }
+
+        if (IsShowingSearchResults)
+        {
+            await SearchCatalogNowAsync();
+        }
+        else
+        {
+            await RefreshRecommendationsAsync();
+        }
+    }
+
+    [RelayCommand]
     public async Task SearchCatalogNowAsync()
     {
         _catalogSearchCts?.Cancel();
@@ -582,7 +712,9 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             var results = (CatalogSearchMediaType == MediaType.Anime)
                 ? await JikanClient.SearchAnimeAsync(query, cancellationToken)
-                : await JikanClient.SearchMangaAsync(query, cancellationToken);
+                : (CatalogSearchMediaType == MediaType.Manhwa
+                    ? await JikanClient.SearchAsync("manhwa", query, cancellationToken)
+                    : await JikanClient.SearchMangaAsync(query, cancellationToken));
 
             CatalogSearchResults.Clear();
 
@@ -606,6 +738,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 CatalogSearchEmptyMessage = $"No catalog results found for '{query}'.";
             }
+            OnPropertyChanged(nameof(DiscoverySectionSubtitle));
         }
         catch (OperationCanceledException)
         {

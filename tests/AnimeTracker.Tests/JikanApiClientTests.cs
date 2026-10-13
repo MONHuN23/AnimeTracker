@@ -465,4 +465,24 @@ public class JikanApiClientTests
         Assert.Contains("filter[subtype]=manhwa", manhwaUrl);
         Assert.Contains("filter[subtype]=manga", mangaUrl);
     }
+
+    [Fact]
+    public async Task GetPopularAsync_CallsPopularEndpoint_WithExpectedQuery()
+    {
+        var handler = new TestHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.jikan.moe/v4/") };
+        var client = new JikanApiClient(httpClient);
+
+        await client.GetPopularAsync("anime");
+        var animeUrl = handler.LastRequest?.RequestUri?.PathAndQuery;
+
+        await client.GetPopularAsync("manga");
+        var mangaUrl = handler.LastRequest?.RequestUri?.PathAndQuery;
+
+        Assert.Equal(2, handler.RequestCount);
+        Assert.NotNull(animeUrl);
+        Assert.NotNull(mangaUrl);
+        Assert.Contains("anime?order_by=popularity&sort=asc&limit=25", animeUrl);
+        Assert.Contains("manga?order_by=popularity&sort=asc&type=manga&limit=25", mangaUrl);
+    }
 }

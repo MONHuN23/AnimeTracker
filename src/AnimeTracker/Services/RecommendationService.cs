@@ -402,6 +402,66 @@ public class RecommendationService
         return new RecommendationResult(ranked, tasteProfile.TopGenres);
     }
 
+    public async Task<RecommendationResult> GetPopularRecommendationsAsync(
+        IReadOnlyList<MediaItem> allItems,
+        MediaTypeFilter typeFilter = MediaTypeFilter.All,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(allItems);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var typesToFetch = typeFilter switch
+        {
+            MediaTypeFilter.Anime => new[] { "anime" },
+            MediaTypeFilter.Manga => new[] { "manga" },
+            MediaTypeFilter.Manhwa => new[] { "manhwa" },
+            _ => new[] { "anime", "manga" }
+        };
+
+        var rawCandidates = new List<JikanSearchResult>();
+
+        try
+        {
+            foreach (var malType in typesToFetch)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var results = await _jikanClient.GetPopularAsync(malType, cancellationToken);
+                rawCandidates.AddRange(results);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (JikanApiException ex) when (ex.IsRateLimited)
+        {
+            return new RecommendationResult(
+                Array.Empty<RecommendationItem>(),
+                Array.Empty<string>(),
+                errorMessage: "Catalog rate limit reached (HTTP 429). Please wait a moment before refreshing.");
+        }
+        catch (Exception ex)
+        {
+            return new RecommendationResult(
+                Array.Empty<RecommendationItem>(),
+                Array.Empty<string>(),
+                errorMessage: $"Error loading popular titles: {ex.Message}");
+        }
+
+        var tasteProfile = BuildTasteProfile(allItems, typeFilter);
+        var ranked = RankCandidates(tasteProfile, rawCandidates, allItems, selectedGenre: null, maxResults: 30);
+
+        if (ranked.Count == 0)
+        {
+            return new RecommendationResult(
+                Array.Empty<RecommendationItem>(),
+                tasteProfile.TopGenres,
+                emptyStateMessage: "No popular titles found matching criteria.");
+        }
+
+        return new RecommendationResult(ranked, tasteProfile.TopGenres);
+    }
+
     public RecommendationResult GetRecommendations(
         IReadOnlyList<MediaItem> allItems,
         MediaTypeFilter typeFilter = MediaTypeFilter.All,
